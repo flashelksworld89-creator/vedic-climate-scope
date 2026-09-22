@@ -245,3 +245,6 @@
 .forecast-details{margin-top:2px;border-top:1px solid #293047;padding-top:10px;color:#929db9;font-size:11px}
 .forecast-details summary{cursor:pointer;color:#b6bfd4;font-weight:700;user-select:none}
 .forecast-details ul{margin:10px 0 0;padding-left:18px;display:grid;gap:5px;line-height:1.4}
+
+/* v2.6 city street-network index */
+.street-index-actions{display:flex;gap:6px;align-items:center}.mini-button.wide{width:auto;padding:6px 10px;font-size:10px}.street-index-streets em{font-style:normal;color:#95a0bd;font-weight:700}.street-index-status{line-height:1.4}.leaflet-pane svg path{vector-effect:non-scaling-stroke}

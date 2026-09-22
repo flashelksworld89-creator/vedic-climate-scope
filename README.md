@@ -1,25 +1,23 @@
-# Vedic Climate Scope v2.5 — Classical Jyotish Rule Library
+# Vedic Climate Scope v2.6 — City Street Network
 
 Static HTML/CSS/JavaScript. No Vite.
 
-## New in v2.5
-- Geographic forecasts remain location-first; personal roles are not used in prediction output.
-- Added classical sign dignity for Sun, Moon, Mars, Mercury, Jupiter, Venus, and Saturn:
-  - exaltation
-  - debilitation
-  - own sign
-  - moolatrikona sign
-  - friend / neutral / enemy sign relationship
-- Added natural planetary friendship tables for the seven classical planets.
-- Added temporary and compound relationship logic between the sign lord and nakshatra lord.
-- Added richer 27-nakshatra metadata: deity, symbol, motivation, and a concise interpretive quality.
-- Retained special Vedic graha drishti for Mars, Jupiter, and Saturn plus the universal 7th aspect.
-- Added strength ranking so only the strongest signals reach the visible forecast.
-- Compact visible forecast format remains: Theme, What may show up, Best use, Watch for.
-- Technical detail remains under “Why this forecast?”.
+## New in v2.6
+- Fullscreen can now build a real city street network from OpenStreetMap via Overpass API.
+- The loader requests named highway ways with geometry, not sampled reverse-geocoding points.
+- Each road geometry is split into contiguous astrological sectors, so a long street may belong to multiple zodiac/nakshatra/Climate House zones.
+- The Nakshatra Street Index aggregates all named roads returned for the selected city extent.
+- Major loaded road segments are drawn over the map using the color of the nakshatra sector they occupy.
+- Changing the transit time reclassifies the already-loaded road geometries against the newly rotated wheel without downloading the street network again.
+- Moving the blue dot no longer clears the city street network.
+- Choosing a different city clears the old network and requires a new build for that city.
 
-## Important interpretation rule
-Outer planets remain supplemental. Classical dignity/friendship scoring is applied only to the seven classical grahas because traditional Jyotish sources do not define the same classical dignity system for Uranus, Neptune, and Pluto. Rahu/Ketu are also not assigned disputed exaltation/debilitation rules in this version.
+## How to use
+1. Search for and select a city.
+2. Enter fullscreen map mode.
+3. Click **Build streets**.
+4. The app queries named OpenStreetMap roads across the fixed city extent, classifies their geometry, and populates the 27-nakshatra street index.
+5. Use the refresh button only when you want to redownload the current city road network.
 
-## Deployment
-Replace the current repository files with these files and commit. Vercel should redeploy automatically.
+## Important
+This indexes named roads returned by OpenStreetMap for the selected city extent. Unnamed service roads, private drives, or roads absent from OpenStreetMap cannot be listed by name.

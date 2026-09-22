@@ -9,7 +9,7 @@ const now=new Date();
 const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
-let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,mapKeyTest:'',horoscopeArea:'Overview'};
+let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,roadWays:[],roadNetwork:[],roadNetworkStatus:'',roadNetworkLoading:false,roadNetworkLayer:null,roadNetworkCount:0,mapKeyTest:'',horoscopeArea:'Overview'};
 const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
 function cloneDefaultProfile(){return JSON.parse(JSON.stringify(DEFAULT_PROFILE))}
@@ -315,12 +315,81 @@ function forecastHTML(area=state.horoscopeArea){
   const f=forecastForLocation(area); if(!f)return `<div class="empty-state">Select a location on the map to generate this forecast.</div>`;
   return `<div class="compact-forecast"><p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>What may show up</span><ul>${f.manifestations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.bestUse)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>Why this forecast?</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`
 }
+
+function cityBBox(){
+  const lat=+state.cityLatitude,lon=+state.cityLongitude,r=cityRadiusKm();
+  const dLat=r/111.32,dLon=r/(111.32*Math.max(.25,Math.cos(lat*Math.PI/180)));
+  return {south:lat-dLat,west:lon-dLon,north:lat+dLat,east:lon+dLon};
+}
+function splitBBoxGrid(box,rows=3,cols=3){
+  const out=[];const dLat=(box.north-box.south)/rows,dLon=(box.east-box.west)/cols;
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)out.push({south:box.south+y*dLat,west:box.west+x*dLon,north:box.south+(y+1)*dLat,east:box.west+(x+1)*dLon});
+  return out;
+}
+const OVERPASS_ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+async function overpassRoadChunk(box,endpointIndex=0){
+  const q=`[out:json][timeout:70];way[\"highway\"][\"name\"](${box.south.toFixed(6)},${box.west.toFixed(6)},${box.north.toFixed(6)},${box.east.toFixed(6)});out tags geom qt;`;
+  let lastErr=null;
+  for(let i=0;i<OVERPASS_ENDPOINTS.length;i++){
+    const url=OVERPASS_ENDPOINTS[(endpointIndex+i)%OVERPASS_ENDPOINTS.length];
+    try{
+      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(q)});
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      const data=await r.json();return data.elements||[];
+    }catch(e){lastErr=e}
+  }
+  throw lastErr||new Error('Road network request failed');
+}
+function classifyRoadWay(way){
+  const name=way?.tags?.name||'',geom=way?.geometry||[];if(!name||geom.length<2)return [];
+  const out=[];let run=null;
+  function flush(){if(run&&run.coords.length>1)out.push(run);run=null}
+  for(let i=0;i<geom.length-1;i++){
+    const a=geom[i],b=geom[i+1],lat=(a.lat+b.lat)/2,lon=(a.lon+b.lon)/2;
+    if(distanceKm(+state.cityLatitude,+state.cityLongitude,lat,lon)>cityRadiusKm()*1.08){flush();continue}
+    const info=analyzeMapPoint(lat,lon),key=`${info.nak.index}|${info.climateHouse}|${info.sign}`;
+    if(!run||run.key!==key){flush();run={key,nakIndex:info.nak.index,nakshatra:info.nak.name,sign:info.sign,signGlyph:SIGN_GLYPHS[SIGNS.indexOf(info.sign)],house:info.climateHouse,coords:[[a.lat,a.lon],[b.lat,b.lon]],name,highway:way.tags.highway||'',osmId:way.id}}
+    else run.coords.push([b.lat,b.lon]);
+  }
+  flush();return out;
+}
+function buildStreetIndexFromNetwork(){
+  const rows=NAKSHATRAS.map((nakshatra,index)=>{const longitude=index*(360/27)+(360/54),sign=signForLongitude(longitude);return {index,nakshatra,longitude,sign:sign.name,signGlyph:sign.glyph,streets:[],streetCount:0}});
+  const sets=rows.map(()=>new Set());
+  for(const seg of state.roadNetwork)sets[seg.nakIndex].add(seg.name);
+  rows.forEach((r,i)=>{const names=[...sets[i]].sort((a,b)=>a.localeCompare(b));r.streetCount=names.length;r.streets=names});
+  state.streetIndex=rows;
+}
+function reclassifyRoadNetwork(){const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));state.roadNetwork=segments;buildStreetIndexFromNetwork();drawRoadNetworkLayer()}
+function clearRoadNetworkLayer(){if(state.roadNetworkLayer&&state.map){try{state.roadNetworkLayer.remove()}catch{}}state.roadNetworkLayer=null}
+function drawRoadNetworkLayer(){
+  clearRoadNetworkLayer();if(!state.map||!state.roadNetwork.length)return;
+  const layer=L.layerGroup();
+  const major=new Set(['motorway','trunk','primary','secondary','tertiary']);
+  let drawn=0;
+  for(const seg of state.roadNetwork){
+    if(!major.has(seg.highway))continue;
+    L.polyline(seg.coords,{color:nakColor(seg.nakIndex,.9),weight:2.2,opacity:.62,interactive:false}).addTo(layer);drawn++;if(drawn>1800)break;
+  }
+  layer.addTo(state.map);state.roadNetworkLayer=layer;
+}
+async function buildCityRoadNetwork(force=false){
+  if(state.roadNetworkLoading)return;
+  if(state.roadNetwork.length&&!force){buildStreetIndexFromNetwork();drawRoadNetworkLayer();updateStreetIndexPanel();return}
+  state.roadNetworkLoading=true;state.streetIndexLoading=true;state.roadNetworkStatus='Loading named city streets from OpenStreetMap…';state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
+  const boxes=splitBBoxGrid(cityBBox(),3,3),byId=new Map();let cursor=0,done=0,failures=0;
+  async function worker(workerIndex){while(cursor<boxes.length){const idx=cursor++;try{const els=await overpassRoadChunk(boxes[idx],workerIndex);for(const el of els)if(el.type==='way'&&el.tags?.name&&el.geometry?.length>1)byId.set(el.id,el)}catch(e){failures++}done++;state.roadNetworkStatus=`Loading streets… ${done}/${boxes.length} map sections`;state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel()}}
+  await Promise.all([worker(0),worker(1)]);
+  state.roadWays=[...byId.values()];const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));
+  state.roadNetwork=segments;state.roadNetworkCount=byId.size;state.roadNetworkLoading=false;state.streetIndexLoading=false;
+  buildStreetIndexFromNetwork();drawRoadNetworkLayer();
+  state.roadNetworkStatus=`Indexed ${byId.size.toLocaleString()} named road ways into ${segments.length.toLocaleString()} astrological street sectors${failures?` · ${failures} map section${failures===1?'':'s'} unavailable`:''}.`;
+  state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
+}
 function streetIndexHTML(){
-  if(!state.maptilerKey)return `<div class="street-index-empty">Save a MapTiler key to load street names.</div>`;
-  if(!['City','Neighborhood','Street'].includes(state.scale))return `<div class="street-index-empty">Street sampling is shown at City, Neighborhood, or Street scale.</div>`;
-  if(state.streetIndexLoading)return `<div class="street-index-empty">Finding streets along the 27 nakshatra wedges…</div>`;
-  if(!state.streetIndex.length)return `<div class="street-index-empty">Enter fullscreen to load the street index.</div>`;
-  return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);return `<div class="street-index-row"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${row.streets.length?row.streets.map(esc).join(' · '):'No named road found at sampled points'}</div></div></div>`}).join('');
+  if(state.roadNetworkLoading)return `<div class="street-index-empty">${esc(state.roadNetworkStatus||'Loading city street network…')}</div>`;
+  if(!state.streetIndex.length)return `<div class="street-index-empty"><b>City street network not loaded.</b><br>Use “Build street network” to classify named OpenStreetMap roads across the fixed city wheel.</div>`;
+  return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);const shown=row.streets.slice(0,14),more=Math.max(0,row.streetCount-shown.length);return `<div class="street-index-row"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
 }
 function extractRoadNames(data){
   const features=data?.features||[];
@@ -340,26 +409,12 @@ async function reverseRoadNames(lat,lon){
   if(!r.ok)throw new Error(`Reverse geocoding failed (${r.status})`);
   return extractRoadNames(await r.json());
 }
-async function buildStreetIndex(force=false){
-  if(!state.maptilerKey||!['City','Neighborhood','Street'].includes(state.scale)){state.streetIndex=[];state.streetIndexStatus='';updateStreetIndexPanel();return}
-  if(state.streetIndexLoading)return;
-  if(state.streetIndex.length&&!force){updateStreetIndexPanel();return}
-  state.streetIndexLoading=true;state.streetIndexStatus='Finding street names…';updateStreetIndexPanel();
-  const asc=activeAsc(), radius=cityRadiusKm();
-  const rows=NAKSHATRAS.map((nakshatra,index)=>{const lon=index*(360/27)+(360/54);const bearing=norm(90+lon-asc);const sign=signForLongitude(lon);return {index,nakshatra,longitude:lon,bearing,sign:sign.name,signGlyph:sign.glyph,streets:[]}});
-  const jobs=[];
-  rows.forEach(row=>[.38,.72].forEach(frac=>jobs.push({row,point:destinationPoint(+state.cityLatitude,+state.cityLongitude,row.bearing,Math.max(.05,radius*frac))})));
-  let cursor=0,authError='';
-  async function worker(){while(cursor<jobs.length){const job=jobs[cursor++];try{const names=await reverseRoadNames(job.point.lat,job.point.lon);for(const name of names){if(name&&!job.row.streets.includes(name)&&job.row.streets.length<4)job.row.streets.push(name)}}catch(e){if(String(e.message||e).startsWith('MAPTILER_403:'))authError=String(e.message).split(':').slice(1).join(':')}}}
-  await Promise.all(Array.from({length:5},()=>worker()));
-  state.streetIndex=rows;state.streetIndexLoading=false;
-  state.streetIndexStatus=authError?`MapTiler rejected reverse geocoding from ${authError}. Add this exact host to Allowed HTTP Origins in MapTiler, or use your stable Vercel production domain.`:'Street index updated from nearby road results along each wedge centerline.';updateStreetIndexPanel();
-}
+async function buildStreetIndex(force=false){return buildCityRoadNetwork(force)}
 function updateStreetIndexPanel(){const body=document.querySelector('#streetIndexBody');if(body)body.innerHTML=streetIndexHTML();const status=document.querySelector('#streetIndexStatus');if(status)status.textContent=state.streetIndexStatus||''}
 async function enterMapFullscreen(){
   const shell=document.querySelector('#mapFullscreenShell');if(!shell)return;
   try{await shell.requestFullscreen();}catch(e){state.searchStatus=`Fullscreen unavailable: ${e.message}`;render();return}
-  setTimeout(()=>{if(state.map)state.map.invalidateSize();buildStreetIndex(false)},120);
+  setTimeout(()=>{if(state.map)state.map.invalidateSize();if(state.roadNetwork.length)buildStreetIndex(false)},120);
 }
 async function exitMapFullscreen(){if(document.fullscreenElement)await document.exitFullscreen()}
 function distanceKm(lat1,lon1,lat2,lon2){
@@ -406,10 +461,11 @@ function selectSearchResult(i){
   if(isCity){
     state.cityLongitude=lon;state.cityLatitude=lat;state.cityName=r.name.split(',')[0];state.cityRadiusKm=cityRadiusFromBBox(r.bbox,lat,lon);
     state.longitude=lon;state.latitude=lat;state.searchStatus=`City wheel centered on ${r.name}`;
+    state.streetIndex=[];state.streetIndexStatus='';state.roadWays=[];state.roadNetwork=[];state.roadNetworkCount=0;state.roadNetworkStatus='';clearRoadNetworkLayer();
   }else{
     state.longitude=lon;state.latitude=lat;state.searchStatus=`Blue location dot set to ${r.name}`;
   }
-  state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);state.streetIndex=[];state.streetIndexStatus='';
+  state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);
   const oldTz=state.timeZone;state.timeZone=lookupTimeZone(state.cityLatitude,state.cityLongitude);try{const instant=zonedInputToDate(state.localDateTime,oldTz);state.localDateTime=toZonedInput(instant,state.timeZone)}catch{}
   state.searchResults=[];calculateTransit();
 }
@@ -463,7 +519,7 @@ async function calculateTransit(doRender=true){
     const wholeSignStart=Math.floor(ascendant/30)*30;
     const wholeSignCusps=Array.from({length:12},(_,i)=>norm(wholeSignStart+i*30));
     state.transit={jd,utc:d.toISOString(),ayanamsa:aya,ascendant,descendant:norm(ascendant+180),mc:houses?.ascmc?.[1],wholeSignCusps,planets};
-    state.engineStatus='ready';state.engineMessage='Swiss Ephemeris ready · Lahiri sidereal · mean node';state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);
+    state.engineStatus='ready';state.engineMessage='Swiss Ephemeris ready · Lahiri sidereal · mean node';state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);if(state.roadWays.length)reclassifyRoadNetwork();
   }catch(err){console.error(err);state.engineStatus='error';state.engineMessage=`Calculation error: ${err.message}`}
   render();
 }
@@ -549,8 +605,8 @@ function climateView(){
       ${state.maptilerKey?'':`<div class="panel compact-module"><span class="eyebrow">MAP SEARCH</span><div class="notice">Add your MapTiler key under Settings to enable place search and the street index.</div></div>`}
     </section>
     <section class="panel wheel-panel primary-map-panel">
-      <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Transit governors · Streets</b></div><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
-      <div class="map-caption"><span>${esc(state.cityName)} fixed wheel</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span></div>
+      <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Transit governors · Streets</b></div><div class="street-index-actions"><button id="buildRoadNetwork" class="mini-button wide" title="Build city street network">Build streets</button><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
+      <div class="map-caption"><span>${esc(state.cityName)} fixed wheel</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span><span>${state.roadNetworkCount?`${state.roadNetworkCount.toLocaleString()} named roads indexed`:'street network not indexed'}</span></div>
     </section>
   </div>
   ${locationHoroscopePanel()}`;
@@ -622,7 +678,7 @@ function initClimateMap(){
   state.mapEpicenterMarker=L.circleMarker([state.cityLatitude,state.cityLongitude],{radius:5,weight:2,color:'#ffd166',fillColor:'#ffd166',fillOpacity:.9}).addTo(map).bindTooltip(`${state.cityName} epicenter`);
   state.mapPointMarker=L.circleMarker([state.latitude,state.longitude],{radius:7,weight:2,color:'#7ec8ff',fillColor:'#3b82f6',fillOpacity:1}).addTo(map).bindTooltip('Blue location dot');
   state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);
-  updateGeographicWheel();
+  updateGeographicWheel();if(state.roadNetwork.length)drawRoadNetworkLayer();
   map.on('zoomend moveend',()=>updateGeographicWheel());
   map.on('click',e=>{
     state.latitude=+e.latlng.lat;state.longitude=+e.latlng.lng;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);
@@ -648,7 +704,7 @@ function bind(){
   document.querySelectorAll('[data-planet]').forEach(b=>b.onclick=()=>{state.selectedPlanet=b.dataset.planet;render()});
   document.querySelectorAll('[data-house]').forEach(b=>b.onclick=()=>{state.selectedHouse=+b.dataset.house;render()});
   ['ascSign','ascDegree','ascMinute','ascSecond'].forEach(id=>{const e=document.querySelector('#'+id);if(e)e.onchange=()=>{state.profile[id]=e.value;save();render()}});
-  const scale=document.querySelector('#scale');if(scale)scale.onchange=()=>{state.scale=scale.value;state.streetIndex=[];state.streetIndexStatus='';render()};
+  const scale=document.querySelector('#scale');if(scale)scale.onchange=()=>{state.scale=scale.value;render()};
   const ascSource=document.querySelector('#ascSource');if(ascSource)ascSource.onchange=()=>{state.useLiveAsc=ascSource.value==='live';render()};
   const lat=document.querySelector('#latitude');if(lat)lat.onchange=()=>{state.latitude=+lat.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
   const lon=document.querySelector('#longitude');if(lon)lon.onchange=()=>{state.longitude=+lon.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
@@ -661,8 +717,8 @@ function bind(){
   const searchInput=document.querySelector('#placeSearch');if(searchInput)searchInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();searchPlace()}};
   const fs=document.querySelector('#fullscreenMap');if(fs)fs.onclick=enterMapFullscreen;
   const fsExit=document.querySelector('#exitFullscreenMap');if(fsExit)fsExit.onclick=exitMapFullscreen;
-  const refreshStreet=document.querySelector('#refreshStreetIndex');if(refreshStreet)refreshStreet.onclick=()=>buildStreetIndex(true);
-  document.onfullscreenchange=()=>{if(state.map)setTimeout(()=>state.map.invalidateSize(),80);if(document.fullscreenElement?.id==='mapFullscreenShell')buildStreetIndex(false)};
+  const buildRoad=document.querySelector('#buildRoadNetwork');if(buildRoad)buildRoad.onclick=()=>buildCityRoadNetwork(false);const refreshStreet=document.querySelector('#refreshStreetIndex');if(refreshStreet)refreshStreet.onclick=()=>buildCityRoadNetwork(true);
+  document.onfullscreenchange=()=>{if(state.map)setTimeout(()=>state.map.invalidateSize(),80);if(document.fullscreenElement?.id==='mapFullscreenShell'&&state.roadNetwork.length)buildStreetIndex(false)};
   document.querySelectorAll('[data-search-result]').forEach(b=>b.onclick=()=>selectSearchResult(+b.dataset.searchResult));
   document.querySelectorAll('[data-horoscope-area]').forEach(b=>b.onclick=()=>{state.horoscopeArea=b.dataset.horoscopeArea;render()});
   const loc=document.querySelector('#useLocation');if(loc)loc.onclick=()=>{if(!navigator.geolocation){state.engineMessage='Browser geolocation is unavailable.';render();return}loc.disabled=true;loc.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{state.latitude=+pos.coords.latitude.toFixed(6);state.longitude=+pos.coords.longitude.toFixed(6);state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);render()},err=>{state.engineMessage=`Location not available: ${err.message}`;render()},{enableHighAccuracy:true,timeout:10000})};
