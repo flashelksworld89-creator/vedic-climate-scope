@@ -183,3 +183,19 @@
   max-width:92vmin;
   height:auto !important;
 }
+
+/* V2.1 fixed-city geographic wheel */
+.geo-wheel-icon{background:transparent!important;border:0!important;pointer-events:none!important}
+.geo-wheel-svg{position:absolute;left:0;top:0;pointer-events:none;opacity:.94}
+.geo-wheel-svg .wheel{width:100%;height:100%;display:block;filter:drop-shadow(0 12px 26px #0008)}
+.house-number{font-size:10px;fill:#eef2ff;font-weight:900;paint-order:stroke;stroke:#070910;stroke-width:1.5px;stroke-opacity:.8}
+.governor-glyph{font-size:15px;font-weight:900;paint-order:stroke;stroke:#070910;stroke-width:1.25px;stroke-opacity:.85}
+.aspect-line{stroke-width:1.15;stroke-opacity:.42;pointer-events:none}
+.aspect-conjunction{stroke:#f5f5f5}.aspect-sextile{stroke:#8dd8ff}.aspect-square{stroke:#ff9b9b}.aspect-trine{stroke:#91f2b0}.aspect-opposition{stroke:#e0a0ff;stroke-width:1.6}
+.street-index-governors{font-size:9.5px;color:#d6def5;line-height:1.35}
+.map-wheel-stage .leaflet-overlay-pane .geo-wheel-icon{z-index:350!important}
+.map-wheel-stage .leaflet-marker-pane{z-index:650!important}
+.map-wheel-stage .leaflet-tooltip-pane{z-index:700!important}
+.location-readout{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media(max-width:1100px){.location-readout{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.location-readout{grid-template-columns:1fr}}
