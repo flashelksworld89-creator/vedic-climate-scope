@@ -232,3 +232,16 @@
 @media(max-width:1100px){.climate-workspace{grid-template-columns:290px minmax(0,1fr)}.primary-map-panel .map-wheel-stage{min-height:540px}}
 @media(max-width:900px){.climate-workspace{grid-template-columns:1fr}.left-stack{grid-template-columns:1fr 1fr}.primary-map-panel .map-wheel-stage{min-height:520px}.horoscope-body{grid-template-columns:1fr}}
 @media(max-width:620px){.left-stack{grid-template-columns:1fr}.primary-map-panel .map-wheel-stage{min-height:420px;aspect-ratio:1/1}.selected-summary{grid-template-columns:1fr}.selected-summary>div.wide{grid-column:auto}.horoscope-head{display:grid}.horoscope-place{text-align:left}.module-actions{grid-template-columns:1fr}}
+
+/* V2.3 compact deterministic location forecasts */
+.horoscope-body{display:block}
+.compact-forecast{max-width:920px;display:grid;gap:12px}
+.forecast-theme{font-size:17px!important;line-height:1.55!important;color:#eef2ff!important;font-weight:650;margin:0!important}
+.forecast-block{border-left:2px solid #6f7898;padding:2px 0 2px 14px}
+.forecast-block>span{display:block;font-size:10px;color:#8d98b5;text-transform:uppercase;letter-spacing:.12em;font-weight:800;margin-bottom:6px}
+.forecast-block ul{margin:0;padding-left:18px;display:grid;gap:4px;color:#c8cfdf;font-size:13px;line-height:1.45}
+.forecast-best,.forecast-caution{margin:0!important;padding:10px 12px;border-radius:10px;background:#0b0f18;border:1px solid #2a3146;font-size:13px!important;line-height:1.5!important}
+.forecast-best{color:#cbd7cf!important}.forecast-caution{color:#d8c9ca!important}
+.forecast-details{margin-top:2px;border-top:1px solid #293047;padding-top:10px;color:#929db9;font-size:11px}
+.forecast-details summary{cursor:pointer;color:#b6bfd4;font-weight:700;user-select:none}
+.forecast-details ul{margin:10px 0 0;padding-left:18px;display:grid;gap:5px;line-height:1.4}
