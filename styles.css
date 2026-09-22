@@ -46,22 +46,22 @@
 .location-readout{grid-template-columns:repeat(4,1fr)}
 
 
-/* V1.6 visible scale resizing + saved key UI */
+/* V1.8 explicit visible wheel resizing */
 .map-wheel-overlay{
-  inset:50%;
-  width:95%;
-  height:95%;
-  transform:translate(-50%,-50%) scale(var(--wheel-scale,.78));
+  inset:auto;
+  left:50%;
+  top:50%;
+  width:var(--wheel-size,76%);
+  height:var(--wheel-size,76%);
+  transform:translate(-50%,-50%);
   transform-origin:center center;
-  transition:transform .35s ease;
+  transition:width .38s ease,height .38s ease;
 }
-.map-wheel-stage{overflow:visible}
+.map-wheel-stage{overflow:hidden}
 .climate-map{border-radius:26px;overflow:hidden}
-.nak-char{font-size:8.6px;font-weight:800;letter-spacing:.015em;stroke-width:1.9px}
-.planet-glyph{font-size:23px;font-weight:800}
+.nak-inward{font-size:10px;fill:#f6f8ff;font-weight:850;letter-spacing:.02em;paint-order:stroke;stroke:#070910;stroke-width:2px;stroke-opacity:.82}
+.planet-glyph{font-size:24px;font-weight:850}
 .planet-node circle{filter:drop-shadow(0 0 5px rgba(255,255,255,.15))}
-.saved-key-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #30374f;background:#0c1019;border-radius:11px;padding:11px 12px;margin-bottom:10px}
-.saved-key-row>div{display:grid;gap:3px}.saved-key-row span{font-size:10px;color:#7f8aa7;text-transform:uppercase;letter-spacing:.08em}.saved-key-row b{font-size:12px;color:#e7ecf8}.saved-key-row .compact{margin:0;width:auto;padding:8px 11px}
 
 /* V1.7 fullscreen climate map + nakshatra street index */
 .map-toolbar{width:100%;display:flex;justify-content:flex-end;margin-bottom:10px}
@@ -110,8 +110,8 @@
 #mapFullscreenShell:-webkit-full-screen .climate-map{border-radius:16px}
 #mapFullscreenShell:fullscreen .map-wheel-overlay,
 #mapFullscreenShell:-webkit-full-screen .map-wheel-overlay{
-  width:min(92vh,92%);
-  height:min(92vh,92%);
+  width:min(var(--wheel-size,76%),92vh);
+  height:min(var(--wheel-size,76%),92vh);
   max-width:calc(100% - 24px);
   max-height:calc(100% - 24px);
 }
@@ -155,4 +155,31 @@
   #mapFullscreenShell:fullscreen .fullscreen-street-index,
   #mapFullscreenShell:-webkit-full-screen .fullscreen-street-index{padding:10px}
   .street-index-head{display:grid;gap:2px}.street-index-streets{font-size:9px}
+}
+
+/* V1.8 corrective styling */
+.controls .saved-key-row,.controls label:has(#maptilerKey){display:none!important}
+.nak-radial{pointer-events:none}
+.street-index-status{white-space:normal;line-height:1.45}
+@media(max-width:700px){.nak-inward{font-size:9px}}
+
+/* V1.9 verified wheel geometry */
+.map-wheel-overlay{
+  inset:auto !important;
+  left:50% !important;
+  top:50% !important;
+  width:var(--wheel-size,76%) !important;
+  height:auto !important;
+  aspect-ratio:1 / 1;
+  transform:translate(-50%,-50%) !important;
+  transition:width .35s ease;
+}
+.map-wheel-overlay .wheel{width:100% !important;height:100% !important;display:block}
+.nak-inward{font-size:10px;fill:#f6f8ff;font-weight:850;letter-spacing:.015em;paint-order:stroke;stroke:#070910;stroke-width:1.9px;stroke-opacity:.86}
+.planet-glyph{font-size:24px;font-weight:850}
+#mapFullscreenShell:fullscreen .map-wheel-overlay,
+#mapFullscreenShell:-webkit-full-screen .map-wheel-overlay{
+  width:var(--wheel-size,76%) !important;
+  max-width:92vmin;
+  height:auto !important;
 }

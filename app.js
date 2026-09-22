@@ -11,7 +11,7 @@ const now=new Date();
 const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
-let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapZoom:11,maptilerKey:localStorage.getItem('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false};
+let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapZoom:11,maptilerKey:localStorage.getItem('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,mapKeyTest:''};
 const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
 function loadProfile(){try{return JSON.parse(localStorage.getItem('vedicProfile'))||structuredClone(DEFAULT_PROFILE)}catch{return structuredClone(DEFAULT_PROFILE)}}
@@ -27,21 +27,15 @@ function formatLon(lon){const sign=Math.floor(norm(lon)/30),deg=norm(lon)%30;ret
 function nakInfo(lon){const x=norm(lon),size=360/27,index=Math.min(26,Math.floor(x/size)),within=x-index*size,pada=Math.min(4,Math.floor(within/(size/4))+1);return {name:NAKSHATRAS[index],lord:NAK_LORDS[index],pada,index}}
 function point(cx,cy,r,deg){const a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]}
 function scaleConfig(){return SCALE_CONFIG[state.scale]||SCALE_CONFIG.City}
-function wheelScaleFactor(){return ({World:.46,Country:.56,State:.67,City:.78,Neighborhood:.90,Street:.98})[state.scale]||.78}
+function wheelSizePercent(){return ({World:42,Country:52,State:64,City:76,Neighborhood:88,Street:98})[state.scale]||76}
 function scaleRadiusKm(){return scaleConfig().radiusKm}
 function scaleRadiusLabel(){const km=scaleRadiusKm();return km>=1?`${km.toFixed(km>=100?0:1)} km`:`${(km*1000).toFixed(0)} m`}
 function nakHue(index){return (index*360/27+18)%360}
 function nakColor(index,alpha=1){return `hsl(${nakHue(index)} 56% 52% / ${alpha})`}
 function radialLabel(name,cx,cy,outerR,angle){
-  const chars=[...name];
-  let y=0;
-  const [x0,y0]=point(cx,cy,outerR,angle);
-  let s=`<g transform="rotate(${angle} ${x0} ${y0})" class="nak-radial">`;
-  chars.forEach(ch=>{
-    y += ch===' ' ? 5.2 : 7.4;
-    if(ch!==' '){s += `<text x="${x0}" y="${y0+y}" text-anchor="middle" class="nak-char">${esc(ch)}</text>`}
-  });
-  return s+'</g>'
+  const [x,y]=point(cx,cy,outerR,angle);
+  const rotation=angle+90;
+  return `<g transform="rotate(${rotation} ${x} ${y})" class="nak-radial"><text x="${x}" y="${y}" dominant-baseline="middle" text-anchor="start" class="nak-inward">${esc(name)}</text></g>`;
 }
 function arcPath(cx,cy,r1,r2,start,end){const p1=point(cx,cy,r2,start),p2=point(cx,cy,r2,end),p3=point(cx,cy,r1,end),p4=point(cx,cy,r1,start);return `M ${p1[0]} ${p1[1]} A ${r2} ${r2} 0 0 1 ${p2[0]} ${p2[1]} L ${p3[0]} ${p3[1]} A ${r1} ${r1} 0 0 0 ${p4[0]} ${p4[1]} Z`}
 function manualAsc(){const p=state.profile;return SIGNS.indexOf(p.ascSign)*30+(+p.ascDegree||0)+(+p.ascMinute||0)/60+(+p.ascSecond||0)/3600}
@@ -70,16 +64,23 @@ function streetIndexHTML(){
   if(!state.streetIndex.length)return `<div class="street-index-empty">Enter fullscreen to load the street index.</div>`;
   return state.streetIndex.map(row=>`<div class="street-index-row"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)}</b><span>${esc(row.nakshatra)}</span></div><div class="street-index-streets">${row.streets.length?row.streets.map(esc).join(' · '):'No named road found at sampled points'}</div></div></div>`).join('');
 }
-function extractRoadName(data){
+function extractRoadNames(data){
   const features=data?.features||[];
-  const road=features.find(f=>f?.properties?.kind==='road'||/street|road|address/i.test(String(f?.id||''))||((f?.place_type||[]).some(t=>/street|address/i.test(t))))||features[0];
-  if(!road)return '';
-  return String(road.text||road.place_name||'').split(',')[0].trim();
+  const names=[];
+  for(const f of features){
+    const type=(f?.place_type||[])[0]||f?.properties?.kind||'';
+    if(type!=='road' && !/road|street/i.test(String(type)))continue;
+    const name=String(f.text||f.place_name||'').split(',')[0].trim();
+    if(name && !names.includes(name))names.push(name);
+  }
+  return names.slice(0,3);
 }
-async function reverseRoad(lat,lon){
-  const url=`https://api.maptiler.com/geocoding/${lon.toFixed(6)},${lat.toFixed(6)}.json?limit=1&language=en&key=${encodeURIComponent(state.maptilerKey)}`;
-  const r=await fetch(url); if(!r.ok)throw new Error(`Reverse geocoding failed (${r.status})`);
-  return extractRoadName(await r.json());
+async function reverseRoadNames(lat,lon){
+  const url=`https://api.maptiler.com/geocoding/${lon.toFixed(6)},${lat.toFixed(6)}.json?types=road&limit=3&language=en&key=${encodeURIComponent(state.maptilerKey)}`;
+  const r=await fetch(url);
+  if(r.status===403)throw new Error(`MAPTILER_403:${window.location.host}`);
+  if(!r.ok)throw new Error(`Reverse geocoding failed (${r.status})`);
+  return extractRoadNames(await r.json());
 }
 async function buildStreetIndex(force=false){
   if(!state.maptilerKey||!['City','Neighborhood','Street'].includes(state.scale)){state.streetIndex=[];state.streetIndexStatus='';updateStreetIndexPanel();return}
@@ -89,11 +90,12 @@ async function buildStreetIndex(force=false){
   const asc=activeAsc(), radius=scaleRadiusKm();
   const rows=NAKSHATRAS.map((nakshatra,index)=>{const lon=index*(360/27)+(360/54);const bearing=norm(90+lon-asc);const sign=signForLongitude(lon);return {index,nakshatra,bearing,sign:sign.name,signGlyph:sign.glyph,streets:[]}});
   const jobs=[];
-  rows.forEach(row=>[.42,.76].forEach(frac=>jobs.push({row,point:destinationPoint(+state.latitude,+state.longitude,row.bearing,Math.max(.05,radius*frac))})));
-  let cursor=0;
-  async function worker(){while(cursor<jobs.length){const job=jobs[cursor++];try{const name=await reverseRoad(job.point.lat,job.point.lon);if(name&&!job.row.streets.includes(name))job.row.streets.push(name)}catch{}}}
-  await Promise.all(Array.from({length:6},()=>worker()));
-  state.streetIndex=rows;state.streetIndexLoading=false;state.streetIndexStatus='Street index updated from sampled wedge centerlines.';updateStreetIndexPanel();
+  rows.forEach(row=>[.38,.72].forEach(frac=>jobs.push({row,point:destinationPoint(+state.latitude,+state.longitude,row.bearing,Math.max(.05,radius*frac))})));
+  let cursor=0,authError='';
+  async function worker(){while(cursor<jobs.length){const job=jobs[cursor++];try{const names=await reverseRoadNames(job.point.lat,job.point.lon);for(const name of names){if(name&&!job.row.streets.includes(name)&&job.row.streets.length<4)job.row.streets.push(name)}}catch(e){if(String(e.message||e).startsWith('MAPTILER_403:'))authError=String(e.message).split(':').slice(1).join(':')}}}
+  await Promise.all(Array.from({length:5},()=>worker()));
+  state.streetIndex=rows;state.streetIndexLoading=false;
+  state.streetIndexStatus=authError?`MapTiler rejected reverse geocoding from ${authError}. Add this exact host to Allowed HTTP Origins in MapTiler, or use your stable Vercel production domain.`:'Street index updated from nearby road results along each wedge centerline.';updateStreetIndexPanel();
 }
 function updateStreetIndexPanel(){const body=document.querySelector('#streetIndexBody');if(body)body.innerHTML=streetIndexHTML();const status=document.querySelector('#streetIndexStatus');if(status)status.textContent=state.streetIndexStatus||''}
 async function enterMapFullscreen(){
@@ -123,9 +125,9 @@ function locationAnalysisCard(){
   return `<div class="location-readout"><div><span>Map point</span><b>${a.lat.toFixed(5)}, ${a.lon.toFixed(5)}</b></div><div><span>Bearing from epicenter</span><b>${a.bearing.toFixed(2)}°</b></div><div><span>Distance from epicenter</span><b>${a.distanceKm>=1?`${a.distanceKm.toFixed(2)} km`:`${(a.distanceKm*1000).toFixed(0)} m`}</b></div><div><span>Wheel boundary</span><b>${a.insideRadius?'Inside active wheel':'Outside active wheel'} · radius ${scaleRadiusLabel()}</b></div><div><span>Projected zodiac</span><b>${a.sign} ${a.signDegree.toFixed(2)}°</b></div><div><span>Nakshatra</span><b>${a.nak.name} · Pada ${a.nak.pada}</b></div><div><span>Nakshatra lord</span><b>${a.nak.lord}</b></div><div><span>Planetary vicinity</span><b>${near?`${a.nearest.glyph} ${a.nearest.name} · ${a.nearest.separation.toFixed(2)}° away`:`No planet within 6° · nearest ${a.nearest?.name||'—'} ${a.nearest?`${a.nearest.separation.toFixed(2)}°`:''}`}</b></div></div>`;
 }
 async function searchPlace(){
-  const key=(document.querySelector('#maptilerKey')?.value||state.maptilerKey||'').trim();
+  const key=(state.maptilerKey||'').trim();
   const q=(document.querySelector('#placeSearch')?.value||'').trim();
-  if(!key){state.searchStatus='Enter your MapTiler API key first.';render();return}
+  if(!key){state.searchStatus='Add your MapTiler key in Settings first.';render();return}
   if(!q){state.searchStatus='Enter a city, street, neighborhood or address.';render();return}
   state.maptilerKey=key;localStorage.setItem('maptilerKey',key);state.searchStatus='Searching…';state.searchResults=[];render();
   try{
@@ -196,19 +198,33 @@ async function calculateTransit(doRender=true){
 
 function wheel(){
   const asc=activeAsc(),rot=90-asc,cx=350,cy=350;
-  let defs=`<defs><radialGradient id="core"><stop offset="0" stop-color="#161b2b" stop-opacity=".70"/><stop offset="1" stop-color="#090b12" stop-opacity=".48"/></radialGradient><filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
-  NAKSHATRAS.forEach((n,i)=>{const st=i*(360/27)+rot,en=st+360/27,mid=(st+en)/2,labelRadius=210;let a1=st+1.2,a2=en-1.2;const upright=((mid%360)+360)%360;if(upright>90&&upright<270){const t=a1;a1=a2;a2=t}const p1=point(cx,cy,labelRadius,a1),p2=point(cx,cy,labelRadius,a2),sweep=(upright>90&&upright<270)?0:1;defs+=`<path id="nakArc${i}" d="M ${p1[0]} ${p1[1]} A ${labelRadius} ${labelRadius} 0 0 ${sweep} ${p2[0]} ${p2[1]}"/>`});
-  defs+='</defs>';
-  let s=`<svg class="wheel" viewBox="0 0 700 700">${defs}<circle cx="350" cy="350" r="336" fill="url(#core)" stroke="#606a8d" stroke-opacity=".50" stroke-width="2"/>`;
+  const defs=`<defs><radialGradient id="core"><stop offset="0" stop-color="#161b2b" stop-opacity=".54"/><stop offset="1" stop-color="#090b12" stop-opacity=".34"/></radialGradient><filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  let s=`<svg class="wheel" viewBox="0 0 700 700">${defs}<circle cx="350" cy="350" r="336" fill="url(#core)" stroke="#606a8d" stroke-opacity=".42" stroke-width="2"/>`;
   const hues=[8,31,56,108,145,174,201,229,255,278,309,338];
-  SIGNS.forEach((n,i)=>{const st=i*30+rot,en=st+30,mid=st+15,[x,y]=point(cx,cy,282,mid);s+=`<path d="${arcPath(cx,cy,245,325,st,en)}" fill="hsl(${hues[i]} 74% 48% / .44)" stroke="#d7dcf2" stroke-opacity=".13"/><text x="${x}" y="${y-7}" text-anchor="middle" class="sign-glyph">${SIGN_GLYPHS[i]}</text><text x="${x}" y="${y+18}" text-anchor="middle" class="sign-name">${n}</text>`});
-  NAKSHATRAS.forEach((n,i)=>{const st=i*(360/27)+rot,en=st+360/27,hue=(i*360/27+18)%360;s+=`<path d="${arcPath(cx,cy,171,243,st,en)}" fill="hsl(${hue} 52% 34% / ${i%2?'.34':'.29'})" stroke="#d6dcf5" stroke-opacity=".22" stroke-width=".8"/><text class="nak-name"><textPath href="#nakArc${i}" startOffset="50%" text-anchor="middle">${n}</textPath></text>`});
-  for(let i=0;i<108;i++){const a=i*(360/108)+rot,p1=point(cx,cy,160,a),p2=point(cx,cy,i%4===0?171:166,a);s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" stroke="#d9def0" stroke-opacity="${i%4===0?'.34':'.16'}" stroke-width="${i%4===0?'.8':'.45'}"/>`}
-  for(let i=0;i<12;i++){const a=i*30+rot,p1=point(cx,cy,94,a),p2=point(cx,cy,171,a);s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" stroke="#cbd3ef" stroke-opacity=".36"/>`}
-  s+=`<circle cx="350" cy="350" r="169" fill="#080a10" fill-opacity=".34" stroke="#8d98bd" stroke-opacity=".28"/><circle cx="350" cy="350" r="92" fill="#111827" fill-opacity=".28" stroke="#aab5d9" stroke-opacity=".28"/><circle cx="350" cy="350" r="5" fill="#ffd166" filter="url(#softGlow)"/>`;
+  SIGNS.forEach((n,i)=>{
+    const st=i*30+rot,en=st+30,mid=st+15,[x,y]=point(cx,cy,286,mid);
+    s+=`<path d="${arcPath(cx,cy,247,325,st,en)}" fill="hsl(${hues[i]} 74% 48% / .32)" stroke="#d7dcf2" stroke-opacity=".11"/><text x="${x}" y="${y-7}" text-anchor="middle" class="sign-glyph">${SIGN_GLYPHS[i]}</text><text x="${x}" y="${y+18}" text-anchor="middle" class="sign-name">${n}</text>`;
+  });
+  NAKSHATRAS.forEach((n,i)=>{
+    const st=i*(360/27)+rot,en=st+360/27,mid=(st+en)/2,hue=nakHue(i);
+    s+=`<path d="${arcPath(cx,cy,158,246,st,en)}" fill="hsl(${hue} 58% 40% / ${i%2?'.27':'.22'})" stroke="#d6dcf5" stroke-opacity=".20" stroke-width=".8"/>`;
+    s+=radialLabel(n,cx,cy,235,mid);
+  });
+  for(let i=0;i<108;i++){
+    const a=i*(360/108)+rot,p1=point(cx,cy,150,a),p2=point(cx,cy,i%4===0?158:155,a);
+    s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" stroke="#d9def0" stroke-opacity="${i%4===0?'.34':'.15'}" stroke-width="${i%4===0?'.8':'.45'}"/>`;
+  }
+  for(let i=0;i<12;i++){
+    const a=i*30+rot,p1=point(cx,cy,92,a),p2=point(cx,cy,158,a);
+    s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" stroke="#cbd3ef" stroke-opacity=".34"/>`;
+  }
+  s+=`<circle cx="350" cy="350" r="156" fill="#080a10" fill-opacity=".18" stroke="#8d98bd" stroke-opacity=".24"/><circle cx="350" cy="350" r="90" fill="#111827" fill-opacity=".14" stroke="#aab5d9" stroke-opacity=".20"/><circle cx="350" cy="350" r="5" fill="#ffd166" filter="url(#softGlow)"/>`;
   ['N','NE','E','SE','S','SW','W','NW'].forEach((d,i)=>{const[x,y]=point(cx,cy,346,i*45);s+=`<text x="${x}" y="${y+6}" text-anchor="middle" class="${d==='E'?'dir east':'dir'}">${d}</text>`});
   s+=`<text x="637" y="338" text-anchor="middle" class="asc-label">ASC</text><text x="63" y="338" text-anchor="middle" class="dsc-label">DSC</text>`;
-  activePlanets().forEach((p)=>{const angle=p.longitude+rot,[x,y]=point(cx,cy,132,angle);s+=`<g class="planet-node" data-title="${esc(p.name)} ${esc(formatLon(p.longitude))}"><circle cx="${x}" cy="${y}" r="15" fill="#121724" fill-opacity=".78" stroke="#e1e6f5" stroke-opacity=".60"/><text x="${x}" y="${y+7}" text-anchor="middle" class="planet-glyph">${p.glyph}</text></g>`});
+  activePlanets().forEach((p)=>{
+    const angle=p.longitude+rot,[x,y]=point(cx,cy,126,angle),nak=nakInfo(p.longitude),color=nakColor(nak.index,.98);
+    s+=`<g class="planet-node" data-title="${esc(p.name)} ${esc(formatLon(p.longitude))} · ${esc(nak.name)}"><circle cx="${x}" cy="${y}" r="15" fill="#101521" fill-opacity=".76" stroke="${color}" stroke-width="2"/><text x="${x}" y="${y+7}" text-anchor="middle" class="planet-glyph" style="fill:${color}">${p.glyph}</text></g>`;
+  });
   return s+'</svg>';
 }
 
@@ -219,11 +235,24 @@ function transitTable(){
 
 function profileView(){const p=state.profile,pr=p.planetRoles[state.selectedPlanet]||[],hr=p.houseRoles[state.selectedHouse]||[];return `<div class="grid two"><section class="panel"><span class="eyebrow">PROFILE MODE</span><h2>Build your astrology profile</h2><div class="segmented">${[['automatic','Calculate My Chart'],['manual','Build Manually'],['quick','Quick Reading']].map(([m,l])=>`<button data-mode="${m}" class="${p.mode===m?'active':''}">${l}</button>`).join('')}</div><h3>Manual Ascendant</h3><div class="form-grid"><label>Sign<select id="ascSign">${SIGNS.map(x=>`<option ${x===p.ascSign?'selected':''}>${x}</option>`).join('')}</select></label><label>Degree<input id="ascDegree" type="number" min="0" max="29" value="${p.ascDegree}"></label><label>Minute<input id="ascMinute" type="number" min="0" max="59" value="${p.ascMinute}"></label><label>Second<input id="ascSecond" type="number" min="0" max="59" value="${p.ascSecond}"></label></div><div class="status-line">Manual ASC: <b>${p.ascSign} ${p.ascDegree}° ${p.ascMinute}′ ${p.ascSecond}″</b></div></section><section class="panel"><span class="eyebrow">PERSONAL MEANINGS</span><h2>Planet & house roles</h2><div class="planet-picker">${PLANETS.map(([n,g])=>`<button data-planet="${n}" class="${state.selectedPlanet===n?'selected':''}"><span>${g}</span>${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">${state.selectedPlanet} roles</div><div class="tags">${pr.map((x,i)=>`<button class="tag" data-remove-planet="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="planetRoleInput" placeholder="e.g. ASC Lord, 5th Lord"><button id="addPlanetRole">+ Add</button></div></div><div class="house-picker top-gap">${Array.from({length:12},(_,i)=>i+1).map(n=>`<button data-house="${n}" class="${state.selectedHouse===n?'selected':''}">H${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">House ${state.selectedHouse} meanings</div><div class="tags">${hr.map((x,i)=>`<button class="tag" data-remove-house="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="houseRoleInput" placeholder="e.g. home business, children"><button id="addHouseRole">+ Add</button></div></div></section></div>`}
 
-function climateView(){const p=state.profile,t=state.transit;return `<div class="climate-layout"><section class="panel controls"><span class="eyebrow">PERSONAL CLIMATE SCOPE</span><h2>Live sidereal wheel</h2><div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div>${state.maptilerKey?`<div class="saved-key-row"><div><span>Map key</span><b>Saved in this browser</b></div><button id="changeMapKey" class="action secondary compact">Change key</button></div>`:`<label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste key once" value=""></label><div class="help-note">Stored only in this browser. Restrict the key to your Vercel domain in MapTiler.</div>`}<div class="search-row"><input id="placeSearch" placeholder="City, neighborhood, street or address"><button id="searchPlace" class="action primary compact">Search</button></div>${state.searchStatus?`<div class="search-status">${esc(state.searchStatus)}</div>`:''}${state.searchResults.length?`<div class="search-results">${state.searchResults.map((r,i)=>`<button data-search-result="${i}"><b>${esc(r.name)}</b><small>${esc(r.type||'place')}</small></button>`).join('')}</div>`:''}<label>Latitude<input id="latitude" type="number" step="0.000001" min="-90" max="90" value="${state.latitude}"></label><label>Longitude<input id="longitude" type="number" step="0.000001" min="-180" max="180" value="${state.longitude}"></label><button id="useLocation" class="action secondary">Use device location</button><button id="centerMap" class="action secondary">Center map on coordinates</button><label>Location local date & time<input id="localDateTime" type="datetime-local" value="${state.localDateTime}"></label><div class="help-note">Time zone: ${esc(state.timeZone)} · UTC used internally: ${state.transit?esc(state.transit.utc.replace('T',' ').slice(0,16)+' UTC'):'calculated on transit'}</div><button id="useNow" class="action secondary">Use current local time</button><button id="calculate" class="action primary" ${state.engineStatus==='loading'?'disabled':''}>Calculate Live Transit</button><label>Wheel Ascendant<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label><label>Projection scale<select id="scale">${['World','Country','State','City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label><div class="metric"><span>Active scale radius</span><b>${scaleRadiusLabel()}</b></div><div class="metric"><span>Active Ascendant</span><b>${formatLon(activeAsc())}</b></div>${t?`<div class="metric"><span>Lahiri ayanamsa</span><b>${t.ayanamsa.toFixed(4)}°</b></div><div class="metric"><span>Node</span><b>Mean Rahu/Ketu</b></div>`:''}<div class="metric"><span>Epicenter</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b></div><div class="metric"><span>Compass rule</span><b>ASC East · DSC West</b></div><div class="notice">Search sets the epicenter. Click another point on the map to identify which projected zodiac sign, nakshatra and pada falls there. This is an astrological geographic projection, not a claim that a physical street is astronomically located beneath a planet.</div></section><section class="panel wheel-panel"><div class="map-toolbar"><button id="fullscreenMap" class="action secondary compact">⛶ Fullscreen map</button></div><div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Streets</b></div><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><div class="wheel-wrap map-wheel-overlay" style="--wheel-scale:${wheelScaleFactor()}">${wheel()}</div><div class="epicenter-pin" title="Epicenter"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div><div class="wheel-status">${t?'Live sidereal transit positions':'Demonstration planet positions'} · Whole Sign house framework · ${state.scale} scale · radius ${scaleRadiusLabel()}</div></section></div><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">LOCATION ANALYSIS</span><h2>Selected map sector</h2></div></div><div id="locationAnalysis">${locationAnalysisCard()}</div></section><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">CALCULATED POSITIONS</span><h2>Transit details</h2></div></div>${transitTable()}</section>`}
+function climateView(){const p=state.profile,t=state.transit;return `<div class="climate-layout"><section class="panel controls"><span class="eyebrow">PERSONAL CLIMATE SCOPE</span><h2>Live sidereal wheel</h2><div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div>${state.maptilerKey?'':`<div class="notice">Map search is not configured. Add your MapTiler key under <b>Settings</b>.</div>`}<div class="search-row"><input id="placeSearch" placeholder="City, neighborhood, street or address"><button id="searchPlace" class="action primary compact">Search</button></div>${state.searchStatus?`<div class="search-status">${esc(state.searchStatus)}</div>`:''}${state.searchResults.length?`<div class="search-results">${state.searchResults.map((r,i)=>`<button data-search-result="${i}"><b>${esc(r.name)}</b><small>${esc(r.type||'place')}</small></button>`).join('')}</div>`:''}<label>Latitude<input id="latitude" type="number" step="0.000001" min="-90" max="90" value="${state.latitude}"></label><label>Longitude<input id="longitude" type="number" step="0.000001" min="-180" max="180" value="${state.longitude}"></label><button id="useLocation" class="action secondary">Use device location</button><button id="centerMap" class="action secondary">Center map on coordinates</button><label>Location local date & time<input id="localDateTime" type="datetime-local" value="${state.localDateTime}"></label><div class="help-note">Time zone: ${esc(state.timeZone)} · UTC used internally: ${state.transit?esc(state.transit.utc.replace('T',' ').slice(0,16)+' UTC'):'calculated on transit'}</div><button id="useNow" class="action secondary">Use current local time</button><button id="calculate" class="action primary" ${state.engineStatus==='loading'?'disabled':''}>Calculate Live Transit</button><label>Wheel Ascendant<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label><label>Projection scale<select id="scale">${['World','Country','State','City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label><div class="metric"><span>Active scale radius</span><b>${scaleRadiusLabel()}</b></div><div class="metric"><span>Active Ascendant</span><b>${formatLon(activeAsc())}</b></div>${t?`<div class="metric"><span>Lahiri ayanamsa</span><b>${t.ayanamsa.toFixed(4)}°</b></div><div class="metric"><span>Node</span><b>Mean Rahu/Ketu</b></div>`:''}<div class="metric"><span>Epicenter</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b></div><div class="metric"><span>Compass rule</span><b>ASC East · DSC West</b></div><div class="notice">Search sets the epicenter. Click another point on the map to identify which projected zodiac sign, nakshatra and pada falls there. This is an astrological geographic projection, not a claim that a physical street is astronomically located beneath a planet.</div></section><section class="panel wheel-panel"><div class="map-toolbar"><button id="fullscreenMap" class="action secondary compact">⛶ Fullscreen map</button></div><div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Streets</b></div><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><div class="wheel-wrap map-wheel-overlay" style="--wheel-size:${wheelSizePercent()}%">${wheel()}</div><div class="epicenter-pin" title="Epicenter"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div><div class="wheel-status">${t?'Live sidereal transit positions':'Demonstration planet positions'} · Whole Sign house framework · ${state.scale} scale · radius ${scaleRadiusLabel()}</div></section></div><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">LOCATION ANALYSIS</span><h2>Selected map sector</h2></div></div><div id="locationAnalysis">${locationAnalysisCard()}</div></section><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">CALCULATED POSITIONS</span><h2>Transit details</h2></div></div>${transitTable()}</section>`}
 
 function horoscopeView(){return `<div class="grid two"><section class="panel hero-panel"><span class="eyebrow">DAILY HOROSCOPE</span><h1>Structured Vedic forecasting</h1><p>The forecast layer will consume calculated transit facts, your custom planet/house roles, nakshatras, house lords, Vedic aspects and Bhavat Bhavam. We are keeping interpretation downstream from the astronomy so the prose cannot invent planet positions.</p></section><section class="panel"><h2>Life areas</h2><div class="life-grid">${['Daily Overview','Self & Direction','Home & Family','Relationships','Career & Work','Money & Earning','Health & Vitality','Travel','Neighbors & Local Activity','Creativity & Children','Spiritual Life','Personal Climate'].map((x,i)=>`<button><span>${String(i+1).padStart(2,'0')}</span>${x}</button>`).join('')}</div></section></div>`}
 
-function settingsView(){return `<section class="panel"><span class="eyebrow">CALCULATION SPECIFICATION</span><h2>Current rules</h2><div class="settings-grid"><div><span>Zodiac</span><b>Sidereal</b></div><div><span>Ayanamsa</span><b>Lahiri</b></div><div><span>Nodes</span><b>Mean Rahu/Ketu</b></div><div><span>Houses</span><b>Whole Sign</b></div><div><span>Outer planets</span><b>Uranus · Neptune · Pluto</b></div><div><span>Wheel orientation</span><b>ASC East · DSC West</b></div></div></section>`}
+async function testMapKey(){
+  if(!state.maptilerKey){state.mapKeyTest='No key saved.';render();return}
+  state.mapKeyTest='Testing this deployment…';render();
+  try{
+    const fwd=`https://api.maptiler.com/geocoding/Las%20Vegas.json?limit=1&key=${encodeURIComponent(state.maptilerKey)}`;
+    const rev=`https://api.maptiler.com/geocoding/-115.1398,36.1699.json?types=road&limit=1&key=${encodeURIComponent(state.maptilerKey)}`;
+    const [a,b]=await Promise.all([fetch(fwd),fetch(rev)]);
+    if(a.ok&&b.ok)state.mapKeyTest=`Key works for search and street lookup from ${window.location.host}.`;
+    else state.mapKeyTest=`Key test failed: search HTTP ${a.status}, street lookup HTTP ${b.status}. Current host: ${window.location.host}.`;
+  }catch(e){state.mapKeyTest=`Key test error: ${e.message}`}
+  render();
+}
+
+function settingsView(){return `<div class="grid two"><section class="panel"><span class="eyebrow">CALCULATION SPECIFICATION</span><h2>Current rules</h2><div class="settings-grid"><div><span>Zodiac</span><b>Sidereal</b></div><div><span>Ayanamsa</span><b>Lahiri</b></div><div><span>Nodes</span><b>Mean Rahu/Ketu</b></div><div><span>Houses</span><b>Whole Sign</b></div><div><span>Outer planets</span><b>Uranus · Neptune · Pluto</b></div><div><span>Wheel orientation</span><b>ASC East · DSC West</b></div></div></section><section class="panel"><span class="eyebrow">MAP SETTINGS</span><h2>Map key</h2>${state.maptilerKey?`<div class="status-line"><b>Map key saved in this browser.</b></div><button id="testMapKey" class="action primary">Test key on this deployment</button><button id="changeMapKey" class="action secondary">Replace saved key</button>`:`<label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste MapTiler key"></label><button id="saveMapKey" class="action primary">Save map key</button>`}${state.mapKeyTest?`<div class="status-line">${esc(state.mapKeyTest)}</div>`:''}<div class="status-line">Allowed HTTP Origin hostname:<br><b>${esc(window.location.host)}</b></div><p>Add this exact hostname to MapTiler Allowed HTTP Origins. If you use a stable production domain, allow that instead of a one-off hashed deployment hostname.</p></section></div>`}<div class="status-line">Allowed HTTP Origin for this deployment:<br><b>${esc(window.location.host)}</b></div><p>For a key restricted by origin, MapTiler must allow the exact hostname you are currently using. A stable Vercel production domain is better than a one-off deployment URL.</p></section></div>`}
 
 function initClimateMap(){
   if(state.tab!=='climate'||!window.L)return;
@@ -273,8 +302,9 @@ function bind(){
   const lon=document.querySelector('#longitude');if(lon)lon.onchange=()=>{state.longitude=+lon.value;setTimeZoneFromCoords(true);moveMapToState();render()};
   const dt=document.querySelector('#localDateTime');if(dt)dt.onchange=()=>state.localDateTime=dt.value;
   const nowBtn=document.querySelector('#useNow');if(nowBtn)nowBtn.onclick=()=>{state.localDateTime=toZonedInput(new Date(),state.timeZone);render()};
-  const keyInput=document.querySelector('#maptilerKey');if(keyInput)keyInput.onchange=()=>{state.maptilerKey=keyInput.value.trim();localStorage.setItem('maptilerKey',state.maptilerKey);render()};
-  const changeKey=document.querySelector('#changeMapKey');if(changeKey)changeKey.onclick=()=>{state.maptilerKey='';localStorage.removeItem('maptilerKey');render()};
+  const saveKey=document.querySelector('#saveMapKey');if(saveKey)saveKey.onclick=()=>{const e=document.querySelector('#maptilerKey');const v=(e?.value||'').trim();if(v){state.maptilerKey=v;localStorage.setItem('maptilerKey',v);render()}};
+  const changeKey=document.querySelector('#changeMapKey');if(changeKey)changeKey.onclick=()=>{state.maptilerKey='';state.mapKeyTest='';localStorage.removeItem('maptilerKey');render()};
+  const testKey=document.querySelector('#testMapKey');if(testKey)testKey.onclick=testMapKey;
   const searchBtn=document.querySelector('#searchPlace');if(searchBtn)searchBtn.onclick=searchPlace;
   const searchInput=document.querySelector('#placeSearch');if(searchInput)searchInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();searchPlace()}};
   const fs=document.querySelector('#fullscreenMap');if(fs)fs.onclick=enterMapFullscreen;

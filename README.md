@@ -1,18 +1,17 @@
-# Vedic Climate Scope v1.7
+# Vedic Climate Scope v1.9 — Verified corrective build
 
 Static HTML/CSS/JavaScript. No Vite.
 
-## New in v1.7
-- Added a native fullscreen Personal Climate map mode.
-- Fullscreen mode displays a left-side Nakshatra Street Index.
-- The index lists the zodiac sign, nakshatra name, and sampled nearby named roads for all 27 nakshatra wedge centerlines.
-- Street lookup uses the same MapTiler key already saved in the browser.
-- Street lookup runs only in fullscreen and only at City, Neighborhood, or Street scale to reduce unnecessary geocoding calls.
-- Added a refresh button to rebuild the street index after changing location, scale, or transit.
-- Fullscreen map preserves the live wheel, planetary glyph colors, compass orientation, and epicenter.
+## Verified fixes
+- Climate Scope no longer contains the MapTiler key input. Key management is only under Settings.
+- Settings includes a live key test for both forward search and reverse street lookup on the current deployed hostname.
+- Wheel size is bound directly to width percentages for each scale: World 42%, Country 52%, State 64%, City 76%, Neighborhood 88%, Street 98%.
+- Nakshatra labels no longer use SVG textPath arcs. Each full nakshatra name begins near the outside of its wedge and runs inward toward the wheel center along the wedge centerline.
+- Planet glyph fill and outline are calculated from the planet's current nakshatra color.
+- Street lookup uses MapTiler reverse geocoding with `types=road`, which MapTiler currently documents as a valid reverse-geocoding type.
 
-## Street lookup method
-For each nakshatra, the app calculates the geographic bearing of the center of that nakshatra sector from the current Ascendant. It samples two points along that radial centerline inside the active geographic radius, reverse-geocodes those coordinates with MapTiler, and shows unique nearby named roads when available. The labels are geographic lookup results; they are not claims that the streets have an astronomical physical property.
+## MapTiler 403
+A 403 means the key is missing, invalid, or restricted. In Settings, use **Test key on this deployment**. If it reports 403, add the exact displayed hostname to MapTiler **Allowed HTTP Origins**, or use a stable production domain and allow that hostname.
 
-## Deployment
-Replace the existing repository files with this version and commit. Vercel should redeploy automatically. No Vite or build command is required.
+## Deploy
+Replace the existing repository files with this build and commit. Vercel will redeploy without Vite or a build step.
