@@ -9,7 +9,7 @@ const now=new Date();
 const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
-let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,roadWays:[],roadNetwork:[],roadNetworkStatus:'',roadNetworkLoading:false,roadNetworkLayer:null,roadNetworkCount:0,mapKeyTest:'',horoscopeArea:'Overview',streetIndexView:'nakshatra',roadCacheStatus:'',autoStreetLoad:true};
+let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,roadWays:[],roadNetwork:[],roadNetworkStatus:'',roadNetworkLoading:false,roadNetworkLayer:null,roadNetworkCount:0,mapKeyTest:'',horoscopeArea:'Overview',houseForecast:null,streetIndexView:'nakshatra',roadCacheStatus:'',autoStreetLoad:true,chartBoundary:{asc:null,moon:null},liveNow:true};
 const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
 function cloneDefaultProfile(){return JSON.parse(JSON.stringify(DEFAULT_PROFILE))}
@@ -48,13 +48,34 @@ function manualAsc(){const p=state.profile;return SIGNS.indexOf(p.ascSign)*30+(+
 function activeAsc(){return state.useLiveAsc&&state.transit?state.transit.ascendant:manualAsc()}
 function activePlanets(){if(state.transit)return state.transit.planets;return PLANETS.map(([name,glyph],i)=>({name,glyph,longitude:norm(manualAsc()+24+i*27.1),demo:true}))}
 
+function isMoonChart(){return state.tab==='moon'}
+function moonRecord(){return activePlanets().find(p=>p.name==='Moon')||null}
+function chartAnchorLongitude(){
+  if(isMoonChart()){
+    const m=moonRecord();
+    return m?Math.floor(norm(m.longitude)/30)*30:Math.floor(activeAsc()/30)*30;
+  }
+  return activeAsc();
+}
+function chartAnchorLabel(){
+  if(isMoonChart()){
+    const m=moonRecord(),sg=m?signForLongitude(m.longitude):signForLongitude(chartAnchorLongitude());
+    return `Moon chart · ${sg.name} rising from Moon`;
+  }
+  return `Ascendant chart · ${formatLon(activeAsc())}`;
+}
+function chartPageTitle(){return isMoonChart()?'Moon Climate':'Ascendant Climate'}
+function chartPageSubtitle(){return isMoonChart()?'Mental processing · Chandra Lagna · refreshes by Moon nakshatra':'External conditions · Lagna · refreshes by Ascendant sign'}
+function chartBoundaryDate(){return isMoonChart()?state.chartBoundary?.moon:state.chartBoundary?.asc}
+function formatBoundary(date){if(!date)return 'Calculating…';try{return new Intl.DateTimeFormat('en-US',{timeZone:state.timeZone,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(date))}catch{return new Date(date).toLocaleString()}}
+
 function angularDiff(a,b){let d=Math.abs(norm(a)-norm(b));return d>180?360-d:d}
 function bearingBetween(lat1,lon1,lat2,lon2){
   const r=Math.PI/180, p1=lat1*r,p2=lat2*r,dl=(lon2-lon1)*r;
   const y=Math.sin(dl)*Math.cos(p2),x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
   return norm(Math.atan2(y,x)/r);
 }
-function projectedLongitudeForBearing(bearing){return norm(activeAsc()+bearing-90)}
+function projectedLongitudeForBearing(bearing){return norm(chartAnchorLongitude()+bearing-90)}
 function destinationPoint(lat,lon,bearing,distanceKm){
   const R=6371, br=bearing*Math.PI/180, d=distanceKm/R;
   const p1=lat*Math.PI/180, l1=lon*Math.PI/180;
@@ -63,7 +84,7 @@ function destinationPoint(lat,lon,bearing,distanceKm){
   return {lat:p2*180/Math.PI,lon:((l2*180/Math.PI+540)%360)-180};
 }
 function signForLongitude(lon){const x=norm(lon),i=Math.floor(x/30);return {name:SIGNS[i],glyph:SIGN_GLYPHS[i],degree:x%30,index:i}}
-function climateHouseForLongitude(lon){return Math.floor(norm(lon-activeAsc())/30)+1}
+function climateHouseForLongitude(lon){return Math.floor(norm(lon-chartAnchorLongitude())/30)+1}
 const GANDANTA_JUNCTIONS=[
   {boundary:0,label:'Revati → Ashwini',waterSign:'Pisces',fireSign:'Aries',waterNak:'Revati',fireNak:'Ashwini'},
   {boundary:120,label:'Ashlesha → Magha',waterSign:'Cancer',fireSign:'Leo',waterNak:'Ashlesha',fireNak:'Magha'},
@@ -504,16 +525,16 @@ function gatedCityForecast(d=cityForecastData()){
   const withheld=ranked.filter(x=>!x.confirmed&&x.score>.75).slice(0,4);
   if(!primary)return {withheld:true,confidence:0,theme:`No dominant ${state.cityName} climate theme cleared the confirmation gate.`,manifestations:['Citywide factors are mixed rather than converging on one dominant condition.'],bestUse:'Best use: read individual sectors rather than forcing one citywide conclusion.',caution:'Watch for: do not generalize one highly active zone to the entire city.',why:ledger.slice(0,12).map(e=>e.text),withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
   const P=FORECAST_THEMES[primary.theme],S=secondary?FORECAST_THEMES[secondary.theme]:null;
-  const manifestations=[`Across the city, ${P.label.toLowerCase()} is supported by ${primary.kinds.length} independent factor types.`,S?`${S.label} is the strongest secondary citywide theme.`:null].filter(Boolean);
+  const manifestations=[isMoonChart()?`Across the Moon chart, ${P.label.toLowerCase()} is supported by ${primary.kinds.length} independent factor types.`:`Across the city, ${P.label.toLowerCase()} is supported by ${primary.kinds.length} independent factor types.`,S?`${S.label} is the strongest secondary citywide theme.`:null].filter(Boolean);
   const topZone=d.zones[0];if(topZone)manifestations.push(`The strongest mapped concentration is ${topZone.direction} · H${topZone.house} · ${topZone.sign.name}/${topZone.nak.name}.`);
   const why=[`City confirmation gate: ${primary.kinds.length} independent factor types · score ${primary.score.toFixed(2)}`,...uniquePhrases(primary.support.map(e=>e.text)).slice(0,7)];
   if(secondary)why.push(`Secondary: ${S.label} · ${secondary.kinds.length} factor types · score ${secondary.score.toFixed(2)}`);
   if(withheld.length)why.push(`Withheld city themes: ${withheld.map(x=>FORECAST_THEMES[x.theme].label).join(', ')}`);
-  return {withheld:false,confidence:primary.kinds.length,theme:`${P.label} is the leading confirmed ${state.cityName} city-climate theme${S?`; ${S.label.toLowerCase()} is secondary`:''}.`,manifestations:uniquePhrases(manifestations).slice(0,3),bestUse:`Best use: ${P.best}.`,caution:`Watch for: ${P.watch}.`,why,confirmed:confirmed.slice(0,3).map(x=>FORECAST_THEMES[x.theme].label),withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
+  return {withheld:false,confidence:primary.kinds.length,theme:isMoonChart()?`${P.label} is the leading confirmed mental-processing theme for ${state.cityName}${S?`; ${S.label.toLowerCase()} is secondary`:''}.`:`${P.label} is the leading confirmed ${state.cityName} city-climate theme${S?`; ${S.label.toLowerCase()} is secondary`:''}.`,manifestations:uniquePhrases(manifestations).slice(0,3),bestUse:`Best use: ${P.best}.`,caution:`Watch for: ${P.watch}.`,why,confirmed:confirmed.slice(0,3).map(x=>FORECAST_THEMES[x.theme].label),withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
 }
 function cityGateHTML(d){
   const f=gatedCityForecast(d);
-  const badge=f.withheld?`<span class="gate-badge withheld">Withheld · insufficient citywide confirmation</span>`:`<span class="gate-badge confirmed">Confirmed city climate · ${f.confidence} factor types</span>`;
+  const badge=f.withheld?`<span class="gate-badge withheld">Withheld · insufficient citywide confirmation</span>`:`<span class="gate-badge confirmed">${isMoonChart()?'Confirmed Moon climate':'Confirmed city climate'} · ${f.confidence} factor types</span>`;
   return `<div class="city-gated-forecast">${badge}<p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>Citywide pattern</span><ul>${f.manifestations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.bestUse)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>City evidence ledger</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`;
 }
 
@@ -528,7 +549,7 @@ function cityForecastDashboard(){
   const d=cityForecastData(),top=d.zones.slice(0,4),tense=d.tense[0],support=d.supportive[0];
   const coreCount=d.gstreets.core.reduce((n,x)=>n+x.streets.length,0),broadCount=d.gstreets.broad.reduce((n,x)=>n+x.streets.length,0);
   return `<section id="cityForecastDashboard" class="panel city-dashboard">
-    <div class="panel-head"><div><span class="eyebrow">CITY FORECAST DASHBOARD</span><h2>${esc(state.cityName)} climate overview</h2></div><div class="dashboard-status">${state.roadNetwork.length?`${state.roadNetworkCount.toLocaleString()} roads indexed`:'Street network loads automatically after city selection'}</div></div>
+    <div class="panel-head"><div><span class="eyebrow">${isMoonChart()?'MOON PROCESSING DASHBOARD':'CITY FORECAST DASHBOARD'}</span><h2>${esc(state.cityName)} ${isMoonChart()?'mental-processing overview':'climate overview'}</h2></div><div class="dashboard-status">${state.roadNetwork.length?`${state.roadNetworkCount.toLocaleString()} roads indexed`:'Street network loads automatically after city selection'}</div></div>
     ${cityGateHTML(d)}
     <div class="dashboard-grid">
       ${top.map((z,i)=>`<article class="zone-card"><div class="zone-rank">${i+1}</div><div><span>${z.direction} · H${z.house}</span><h3>${z.sign.glyph} ${esc(z.sign.name)} / ${esc(z.nak.name)}</h3><p>${z.governors.length?`Transit governor: ${z.governors.map(g=>`${g.glyph} ${esc(g.name)}`).join(' · ')}`:`Nakshatra lord: ${esc(z.nak.lord)}`}</p><p>${z.streetCount?`${z.streetCount} named streets cross this zone.`:'Street count available after city network build.'}</p><small>${esc(zoneAdvice(z))}</small></div></article>`).join('')}
@@ -771,6 +792,25 @@ function calcBody(swe,jd,id,name,glyph){
   return {name,glyph,longitude:lon,latitude:r[1]||0,speed:r[3]||0,retrograde:(r[3]||0)<0,...nakInfo(lon)};
 }
 
+
+function jdForDate(swe,d){const hour=d.getUTCHours()+d.getUTCMinutes()/60+d.getUTCSeconds()/3600;return swe.julday(d.getUTCFullYear(),d.getUTCMonth()+1,d.getUTCDate(),hour)}
+function siderealMoonLongitudeAt(d){const swe=state.swe;if(!swe)return null;swe.set_sid_mode(swe.SE_SIDM_LAHIRI,0,0);return norm(swe.calc_ut(jdForDate(swe,d),swe.SE_MOON,swe.SEFLG_SWIEPH|swe.SEFLG_SIDEREAL|swe.SEFLG_SPEED)[0])}
+function siderealAscendantAt(d){const swe=state.swe;if(!swe)return null;const jd=jdForDate(swe,d);swe.set_sid_mode(swe.SE_SIDM_LAHIRI,0,0);const aya=norm(swe.get_ayanamsa(jd)),houses=swe.houses(jd,+state.cityLatitude,+state.cityLongitude,'P');const tropicalAsc=houses?.ascmc?.[0] ?? houses?.ascendant ?? houses?.cusps?.[1] ?? houses?.cusps?.[0];return Number.isFinite(tropicalAsc)?norm(tropicalAsc-aya):null}
+function findNextCategoricalIngress(startDate,valueFn,indexFn,maxHours,stepMinutes){
+  const startIndex=indexFn(valueFn(startDate));let lo=new Date(startDate),hi=null;
+  for(let mins=stepMinutes;mins<=maxHours*60;mins+=stepMinutes){const d=new Date(startDate.getTime()+mins*60000);if(indexFn(valueFn(d))!==startIndex){hi=d;break}lo=d}
+  if(!hi)return null;
+  for(let i=0;i<22;i++){const mid=new Date((lo.getTime()+hi.getTime())/2);if(indexFn(valueFn(mid))===startIndex)lo=mid;else hi=mid}
+  return hi.toISOString();
+}
+function updateChartBoundaries(baseDate){
+  if(!state.swe)return;
+  try{
+    state.chartBoundary.asc=findNextCategoricalIngress(baseDate,siderealAscendantAt,x=>Math.floor(norm(x)/30),6,5);
+    state.chartBoundary.moon=findNextCategoricalIngress(baseDate,siderealMoonLongitudeAt,x=>Math.floor(norm(x)/(360/27)),40,15);
+  }catch(e){console.warn('Boundary calculation failed',e)}
+}
+
 async function calculateTransit(doRender=true){
   if(!state.swe)return;
   try{
@@ -796,13 +836,14 @@ async function calculateTransit(doRender=true){
     const wholeSignStart=Math.floor(ascendant/30)*30;
     const wholeSignCusps=Array.from({length:12},(_,i)=>norm(wholeSignStart+i*30));
     state.transit={jd,utc:d.toISOString(),ayanamsa:aya,ascendant,descendant:norm(ascendant+180),mc:houses?.ascmc?.[1],wholeSignCusps,planets};
+    updateChartBoundaries(d);
     state.engineStatus='ready';state.engineMessage='Swiss Ephemeris ready · Lahiri sidereal · mean node';state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);if(state.roadWays.length)reclassifyRoadNetwork();
   }catch(err){console.error(err);state.engineStatus='error';state.engineMessage=`Calculation error: ${err.message}`}
   render();
 }
 
 function wheel(){
-  const asc=activeAsc(),rot=90-asc,cx=350,cy=350;
+  const anchor=chartAnchorLongitude(),rot=90-anchor,cx=350,cy=350;
   let defs=`<defs><radialGradient id="core"><stop offset="0" stop-color="#161b2b" stop-opacity=".50"/><stop offset="1" stop-color="#090b12" stop-opacity=".28"/></radialGradient><filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
   let s=`<svg class="wheel" viewBox="0 0 700 700">${defs}<circle cx="350" cy="350" r="336" fill="url(#core)" stroke="#606a8d" stroke-opacity=".40" stroke-width="2"/>`;
   const hues=[8,31,56,108,145,174,201,229,255,278,309,338];
@@ -814,7 +855,7 @@ function wheel(){
   s+=`<circle cx="350" cy="350" r="162" fill="#080a10" fill-opacity=".15" stroke="#8d98bd" stroke-opacity=".24"/><circle cx="350" cy="350" r="78" fill="#111827" fill-opacity=".13" stroke="#aab5d9" stroke-opacity=".22"/><circle cx="350" cy="350" r="5" fill="#ffd166" filter="url(#softGlow)"/>`;
   for(const asp of aspectPairs()){const a1=asp.a.longitude+rot,a2=asp.b.longitude+rot,[x1,y1]=point(cx,cy,128,a1),[x2,y2]=point(cx,cy,128,a2);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="aspect-line aspect-${asp.type}"/>`}
   ['N','NE','E','SE','S','SW','W','NW'].forEach((d,i)=>{const[x,y]=point(cx,cy,346,i*45);s+=`<text x="${x}" y="${y+6}" text-anchor="middle" class="${d==='E'?'dir east':'dir'}">${d}</text>`});
-  s+=`<text x="637" y="338" text-anchor="middle" class="asc-label">ASC</text><text x="63" y="338" text-anchor="middle" class="dsc-label">DSC</text>`;
+  s+=`<text x="637" y="338" text-anchor="middle" class="asc-label">${isMoonChart()?'☽ H1':'ASC'}</text><text x="63" y="338" text-anchor="middle" class="dsc-label">${isMoonChart()?'H7':'DSC'}</text>`;
   activePlanets().forEach((p)=>{const angle=p.longitude+rot,[x,y]=point(cx,cy,128,angle),nak=nakInfo(p.longitude),color=nakColor(nak.index,.98);s+=`<g class="planet-node" data-title="${esc(p.name)} ${esc(formatLon(p.longitude))} · ${esc(nak.name)}"><circle cx="${x}" cy="${y}" r="15" fill="#101521" fill-opacity=".76" stroke="${color}" stroke-width="2"/><text x="${x}" y="${y+7}" text-anchor="middle" class="planet-glyph" style="fill:${color}">${p.glyph}</text></g>`});
   return s+'</svg>';
 }
@@ -832,7 +873,7 @@ function selectedPointSummary(){
   if(!a)return `<div class="compact-empty">Move the blue dot to inspect this location.</div>`;
   const gov=a.governors?.length?a.governors.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`No current transit governor`;
   return `<div class="selected-summary">
-    <div><span>Climate house</span><b>H${a.climateHouse}</b></div>
+    <div><span>${isMoonChart()?'Moon house':'Climate house'}</span><b>H${a.climateHouse}</b></div>
     <div><span>Zodiac</span><b>${esc(a.sign)} ${a.signDegree.toFixed(2)}°</b></div>
     <div><span>Nakshatra</span><b>${esc(a.nak.name)} · P${a.nak.pada}</b></div>
     <div><span>Gandanta</span><b>${a.gandanta?(a.gandanta.core?'Core · ':'Transition · ')+esc(a.gandanta.label):'No'}</b></div>
@@ -840,16 +881,97 @@ function selectedPointSummary(){
     <div class="wide"><span>Transit governor</span><b>${gov}</b></div>
   </div>`;
 }
+
+const CLIMATE_HOUSE_LIBRARY={
+1:{name:'Identity & Beginnings',domain:'entrances, first impressions, movement starts, visibility, and the general character of the area',city:['new activity, arrivals, launches, and noticeable movement','people acting independently or setting the tone','changes that affect how the area is perceived'],best:'starting, surveying, initiating, or testing a new direction',watch:'impulsive starts, congestion around entrances, or overreacting to first impressions'},
+2:{name:'Resources & Commerce',domain:'money, food, stored resources, retail exchange, speech, and material security',city:['shopping, pricing, banking, food, supplies, or resource decisions','commercial conversations and transactions','questions of value, ownership, or access'],best:'purchases, pricing, supply decisions, budgeting, and resource planning',watch:'overspending, scarcity reactions, or disputes about value'},
+3:{name:'Movement & Local Communication',domain:'short travel, streets, messages, neighbors, local commerce, and day-to-day movement',city:['traffic changes, errands, deliveries, calls, messages, and neighborhood encounters','increased movement between nearby places','local information spreading quickly'],best:'short trips, errands, networking, messaging, and gathering local information',watch:'miscommunication, rushed driving, missed turns, or fragmented attention'},
+4:{name:'Home & Foundations',domain:'homes, land, property, emotional security, family spaces, and the physical foundation of the area',city:['residential matters, property concerns, family activity, and changes affecting comfort','attention to land, buildings, housing, or local roots','a stronger need for stability or protection'],best:'home matters, property review, repair, grounding, and strengthening foundations',watch:'domestic tension, property delays, or becoming overly defensive'},
+5:{name:'Creativity & Recreation',domain:'entertainment, children, romance, creativity, leisure, speculation, and visible enjoyment',city:['recreation, entertainment, artistic activity, dating, children, or social play','creative events or attention-seeking activity','speculation and risk-taking becoming more noticeable'],best:'creative work, recreation, performances, social activity, and measured experimentation',watch:'unnecessary risk, drama, distraction, or overconfidence'},
+6:{name:'Work & Problems',domain:'service, labor, routines, health concerns, repair, conflict, obstacles, and practical problem-solving',city:['work crews, maintenance, delays, disputes, service activity, or problems requiring correction','increased routine labor or administrative tasks','issues becoming visible because they need repair'],best:'maintenance, troubleshooting, service work, health routines, and resolving practical problems',watch:'friction, fatigue, complaints, or letting small problems accumulate'},
+7:{name:'Meetings & Public Exchange',domain:'partnerships, contracts, customers, negotiations, open opponents, and direct encounters with others',city:['meetings, negotiations, customer activity, agreements, or visible interpersonal dynamics','other people setting the pace','partnership or opposition becoming more obvious'],best:'negotiation, client activity, meetings, agreements, and understanding opposing positions',watch:'dependency on others, open conflict, or forcing agreement'},
+8:{name:'Shared Resources & Hidden Matters',domain:'shared money, emergencies, confidential matters, investigation, vulnerability, disruption, and transformation',city:['private negotiations, insurance, debts, shared resources, investigations, or sudden complications','hidden problems surfacing for review','situations requiring discretion, research, or contingency planning'],best:'research, audits, emergency planning, confidential work, and dealing with root causes',watch:'secrecy, crisis thinking, power struggles, or making assumptions without evidence'},
+9:{name:'Long Routes & Guidance',domain:'long-distance travel, law, education, belief systems, publishing, institutions, and guidance',city:['longer routes, travel planning, education, legal or institutional matters','people seeking advice, direction, or a broader view','connections beyond the immediate neighborhood'],best:'longer travel, study, legal/institutional matters, planning, and seeking expert guidance',watch:'overconfidence, rigid beliefs, or ignoring practical details'},
+10:{name:'Authority & Public Activity',domain:'career, government, leadership, reputation, institutions, public responsibility, and visible results',city:['official activity, business decisions, leadership, public events, or contact with authority','greater visibility and accountability','work that affects the area’s reputation or status'],best:'professional activity, leadership, official business, accountability, and visible execution',watch:'status conflicts, public pressure, or overextension'},
+11:{name:'Gains & Networks',domain:'income, gains, organizations, friends, communities, technology, objectives, and collective activity',city:['networking, community activity, income opportunities, group events, or progress toward shared goals','connections becoming useful or productive','larger organizations influencing the area'],best:'networking, group activity, income-building, technology, and advancing measurable goals',watch:'crowd effects, opportunism, or depending too heavily on group approval'},
+12:{name:'Closure & Behind-the-Scenes',domain:'expenses, isolation, hospitals, retreats, foreign connections, sleep, loss, endings, and hidden work',city:['closures, expenses, quiet work, distant connections, institutions, or reduced visibility','activity happening out of public view','a need to finish, release, withdraw, or prepare before re-entry'],best:'closure, private work, rest, foreign/distant matters, research, and reducing unnecessary exposure',watch:'waste, confusion, isolation, avoidable expenses, or disappearing from necessary responsibilities'}
+};
+const MOON_HOUSE_LIBRARY={
+1:{name:'Immediate Perception',domain:'self-awareness, instinctive reactions, attention, and the way the environment is personally registered',city:['heightened self-awareness and immediate reactions to surroundings','a stronger tendency to personalize what is happening nearby','attention turning toward safety, identity, and first impressions'],best:'checking your immediate reaction before acting and noticing what is actually present',watch:'taking temporary feelings as objective facts'},
+2:{name:'Security & Value',domain:'mental security, food, money, speech, possessions, and what feels worth protecting',city:['attention turning toward prices, food, money, possessions, and practical security','conversations colored by concerns about value or sufficiency','a desire for familiar resources and dependable surroundings'],best:'budgeting, practical planning, calm conversations, and identifying what really provides stability',watch:'scarcity thinking, possessiveness, or emotionally loaded spending'},
+3:{name:'Local Attention & Messaging',domain:'curiosity, messages, short trips, neighbors, skills, and the mind’s immediate information loop',city:['more messages, errands, short trips, observations, and neighborhood chatter','rapid shifts of attention between nearby people or places','a stronger urge to ask questions, compare information, or move around'],best:'short trips, gathering information, writing, calls, and observing local patterns',watch:'scattered attention, rumor, impulsive replies, or nervous movement'},
+4:{name:'Emotional Foundation',domain:'comfort, home, belonging, memory, private mood, and the need for emotional grounding',city:['stronger sensitivity to homes, property, family spaces, and feelings of belonging','memories or private concerns coloring perception of the area','a desire to retreat, settle, repair, or create comfort'],best:'home matters, grounding, rest, property review, and emotional reset',watch:'moodiness, defensiveness, or confusing familiarity with safety'},
+5:{name:'Expression & Enjoyment',domain:'creativity, romance, pleasure, children, play, confidence, and imaginative projection',city:['more attention to entertainment, dating, children, creativity, or enjoyable distractions','a stronger wish to express feelings visibly','greater emotional investment in recreation or speculation'],best:'creative work, recreation, affectionate connection, and low-stakes experimentation',watch:'drama, gambling on mood, or seeking validation through attention'},
+6:{name:'Mental Friction & Correction',domain:'worry, work routines, health concerns, conflict, service, and problems the mind feels compelled to solve',city:['heightened awareness of delays, defects, chores, disputes, or health routines','the mind focusing on what needs fixing','a more analytical or critical response to everyday conditions'],best:'troubleshooting, maintenance, service work, routines, and resolving specific problems',watch:'worry loops, irritability, fault-finding, or turning every inconvenience into a crisis'},
+7:{name:'Other People as Mirror',domain:'relationships, customers, negotiations, public encounters, projection, and emotional response to other people',city:['other people strongly shaping mood and perception','greater sensitivity to meetings, agreements, attraction, disagreement, or customer interactions','a tendency to understand the environment through direct encounters'],best:'listening, negotiation, partnership, and checking projections against what others actually say',watch:'dependency, reactive conflict, or assuming another person represents the whole situation'},
+8:{name:'Hidden Processing',domain:'fear, vulnerability, shared resources, secrets, crisis awareness, investigation, and psychological transformation',city:['greater sensitivity to hidden problems, risk, debts, shared resources, or confidential matters','the mind probing beneath appearances','unexpected information producing deeper emotional processing'],best:'research, private reflection, audits, contingency planning, and facing root causes',watch:'suspicion, catastrophizing, secrecy, or compulsive interpretation'},
+9:{name:'Meaning & Perspective',domain:'beliefs, guidance, long-distance concerns, education, law, philosophy, and the search for a larger explanation',city:['attention moving toward travel, learning, law, institutions, teachers, or broader meaning','a desire to place local events into a bigger story','greater receptivity to advice, philosophy, or distant perspectives'],best:'study, planning, long travel, seeking guidance, and widening perspective',watch:'preaching, certainty without evidence, or ignoring local facts for a preferred worldview'},
+10:{name:'Public Mental Focus',domain:'ambition, responsibility, authority, reputation, visible performance, and concern with outcomes',city:['greater mental focus on work, authority, public image, deadlines, and visible results','increased awareness of responsibility or evaluation','a stronger urge to accomplish something measurable'],best:'professional focus, decisions, leadership, and completing visible responsibilities',watch:'status anxiety, pressure, overwork, or treating every interaction as a performance'},
+11:{name:'Social Expectations & Gains',domain:'friends, groups, networks, hopes, income, technology, and expectations about future results',city:['mood being influenced by friends, crowds, organizations, technology, or group expectations','attention on gains, opportunities, future plans, and social feedback','a stronger desire to connect with useful networks'],best:'networking, collaborative planning, technology, and defining realistic goals',watch:'comparison, crowd psychology, opportunism, or letting group approval determine mood'},
+12:{name:'Withdrawal & Subconscious Processing',domain:'sleep, endings, isolation, expenses, distant matters, imagination, release, and material moving below conscious awareness',city:['a quieter, more inward, tired, private, or dreamlike response to the environment','attention drifting toward endings, distant matters, hidden expenses, or retreat','a need to process rather than immediately explain or act'],best:'rest, closure, private reflection, research, meditation, and reducing stimulation',watch:'avoidance, confusion, escapism, unnecessary expense, or acting from exhaustion'}
+};
+function activeHouseLibrary(){return isMoonChart()?MOON_HOUSE_LIBRARY:CLIMATE_HOUSE_LIBRARY}
+function climateHouseCuspLongitude(h){return norm(chartAnchorLongitude()+(h-1)*30)}
+function climateHouseMidLongitude(h){return norm(climateHouseCuspLongitude(h)+15)}
+function houseOccupants(h){return activePlanets().filter(p=>climateHouseForLongitude(p.longitude)===h)}
+function houseAspectTargetsForPlanet(p){
+  const from=climateHouseForLongitude(p.longitude),targets=[{house:((from+5)%12)+1,type:'7th aspect'}];
+  if(p.name==='Mars')targets.push({house:((from+2)%12)+1,type:'4th aspect'},{house:((from+6)%12)+1,type:'8th aspect'});
+  if(p.name==='Jupiter')targets.push({house:((from+3)%12)+1,type:'5th aspect'},{house:((from+7)%12)+1,type:'9th aspect'});
+  if(p.name==='Saturn')targets.push({house:((from+1)%12)+1,type:'3rd aspect'},{house:((from+8)%12)+1,type:'10th aspect'});
+  return targets
+}
+function planetsAspectingHouse(h){
+  const out=[];for(const p of activePlanets())for(const a of houseAspectTargetsForPlanet(p))if(a.house===h)out.push({planet:p,type:a.type,fromHouse:climateHouseForLongitude(p.longitude)});return out
+}
+function climateHouseCondition(h){
+  const cusp=climateHouseCuspLongitude(h),mid=climateHouseMidLongitude(h),cuspSign=signForLongitude(cusp),midNak=nakInfo(mid),lordName=SIGN_LORDS[cuspSign.name],lord=planetClimateRecord(lordName),occupants=houseOccupants(h),aspects=planetsAspectingHouse(h),derived=bhavatBhavamHouse(h),gandanta=gandantaInfo(mid),moon=planetClimateRecord('Moon');
+  return {h,cusp,mid,cuspSign,midNak,lordName,lord,occupants,aspects,derived,gandanta,moon,library:activeHouseLibrary()[h]}
+}
+function houseEvidence(h){
+  const c=climateHouseCondition(h),e=[];
+  const add=(kind,text,weight=1,polarity='support')=>e.push({kind,text,weight,polarity});
+  add('house',`House ${h} governs ${c.library.domain}.`,1.1);
+  if(c.lord){const st=placementStrength(c.lord);add('house_lord',`${c.lordName}, lord of the sign on House ${h}, is in ${c.lord.sign} / ${c.lord.nak.name}, Climate House ${c.lord.climateHouse} (${st.dignity.label}).`,.9+Math.max(-.25,Math.min(.45,st.score*.12)),st.score<-1?'pressure':'support')}
+  for(const p of c.occupants){const st=placementStrength(planetClimateRecord(p.name));add('occupant',`${p.name} occupies House ${h} in ${signForLongitude(p.longitude).name} / ${nakInfo(p.longitude).name}${p.retrograde?' retrograde':''}.`,1.05+Math.max(-.15,Math.min(.35,st.score*.08)),st.score<-1?'pressure':'support')}
+  for(const a of c.aspects)add('aspect',`${a.planet.name} casts its ${a.type} from Climate House ${a.fromHouse} into House ${h}.`,/Mars|Saturn/.test(a.planet.name)?.9:.75,/Mars|Saturn/.test(a.planet.name)?'pressure':'support');
+  if(c.moon?.climateHouse===h)add('moon',`The Moon currently occupies House ${h} in ${c.moon.nak.name}, making this house more immediate and changeable.`,.85);
+  if(c.gandanta)add('gandanta',`${c.gandanta.core?'Core':'Broad'} ${c.gandanta.label} Gandanta touches the middle of this house sector.`,c.gandanta.core?1.2:.8,'pressure');
+  add('bhavat_bhavam',`Bhavat Bhavam links House ${h} to House ${c.derived}.`,.55);
+  add('nakshatra',`The center of the house falls in ${c.midNak.name} (lord ${c.midNak.lord}).`,.65);
+  return {condition:c,evidence:e}
+}
+function houseAreaForecast(h){
+  const {condition:c,evidence}=houseEvidence(h),lib=c.library;
+  const supportive=evidence.filter(x=>x.polarity!=='pressure').reduce((s,x)=>s+x.weight,0),pressure=evidence.filter(x=>x.polarity==='pressure').reduce((s,x)=>s+x.weight,0);
+  const occupied=c.occupants.map(p=>p.name),aspecting=c.aspects.map(a=>a.planet.name);
+  let tone=pressure>supportive*.8?'pressurized and corrective':supportive>pressure*1.6?'productive and supported':'mixed but active';
+  if(!c.occupants.length&&!c.aspects.length&&c.moon?.climateHouse!==h)tone='quieter and more background-oriented';
+  let theme=isMoonChart()?`Moon House ${h} — ${lib.name}: this part of ${state.cityName} is being mentally processed as ${tone}. Attention is drawn toward ${lib.domain}.`:`House ${h} — ${lib.name}: this part of ${state.cityName} is currently ${tone}. Its main field concerns ${lib.domain}.`;
+  const events=[...lib.city];
+  if(occupied.length)events.unshift(`${occupied.join(' and ')} currently occupy this house, making their themes more visible in this part of town.`);
+  if(c.aspects.length)events.push(`${uniquePhrases(aspecting).join(' and ')} are aspecting this house, modifying how events develop here.`);
+  if(c.gandanta)events.unshift(`This sector intersects ${c.gandanta.label} Gandanta, so transitions, endings, and rerouting deserve more attention.`);
+  let best=`Best use: ${lib.best}.`;
+  let caution=`Watch for: ${lib.watch}.`;
+  if(pressure>supportive*.8)caution=`Watch for: ${lib.watch}; the current planetary pressure suggests allowing extra time for correction rather than forcing a clean result.`;
+  if(c.gandanta)caution=`Watch for: this house sector intersects Gandanta. Verify timing, routing, and commitments before making irreversible moves.`;
+  const why=[`House cusp: ${c.cuspSign.name} ${c.cuspSign.degree.toFixed(2)}° · lord ${c.lordName}`,`House-center nakshatra: ${c.midNak.name} · lord ${c.midNak.lord}`,c.lord?keyPlanetSummary(c.lord,'House lord'):null,c.occupants.length?`Occupants: ${c.occupants.map(p=>`${p.name} (${signForLongitude(p.longitude).name}/${nakInfo(p.longitude).name})`).join(' · ')}`:'No planets currently occupy this house',c.aspects.length?`Aspects into house: ${c.aspects.map(a=>`${a.planet.name} ${a.type}`).join(' · ')}`:'No major classical graha drishti into this house',`Bhavat Bhavam: House ${h} → House ${c.derived}`,c.moon?`Moon: H${c.moon.climateHouse} · ${c.moon.sign}/${c.moon.nak.name}`:null,c.gandanta?`${c.gandanta.core?'Core':'Broad'} Gandanta: ${c.gandanta.label}`:null].filter(Boolean);
+  const factorTypes=new Set(evidence.map(x=>x.kind)).size;
+  return {theme,events:uniquePhrases(events).slice(0,3),best,caution,why,factorTypes,tone}
+}
+function houseForecastHTML(h){
+  const f=houseAreaForecast(h);return `<div class="compact-forecast house-forecast"><span class="gate-badge confirmed">House analysis · ${f.factorTypes} factor types</span><p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>${isMoonChart()?'How this part of town may be mentally processed':'What may show up in this part of town'}</span><ul>${f.events.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.best)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>Why this house forecast?</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`
+}
 function locationHoroscopePanel(){
-  const areas=['Overview','Home','Work','Relationships','Money','Travel','Neighborhood','Personal Climate'];
   const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
-  const gov=a?.governors?.length?a.governors.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):'No planet currently occupying this nakshatra';
-  return `<section class="panel location-horoscope">
-    <div class="horoscope-head"><div><span class="eyebrow">LOCATION HOROSCOPE</span><h2>${esc(state.horoscopeArea)} forecast</h2></div><div class="horoscope-place">${esc(state.cityName)} · H${a?.climateHouse||'—'} · ${a?esc(a.nak.name):'—'}</div></div>
-    <div class="horoscope-tabs">${areas.map(x=>`<button data-horoscope-area="${x}" class="${state.horoscopeArea===x?'active':''}">${x}</button>`).join('')}</div>
-    <div id="locationHoroscopeBody" class="horoscope-body">
-      ${forecastHTML(state.horoscopeArea)}
-    </div>
+  const activeH=state.houseForecast||a?.climateHouse||1;
+  const c=climateHouseCondition(activeH);
+  return `<section class="panel location-horoscope house-horoscope-panel">
+    <div class="horoscope-head"><div><span class="eyebrow">${isMoonChart()?'MOON HOUSE HOROSCOPE':'CITY HOUSE HOROSCOPE'}</span><h2>House ${activeH} · ${esc(activeHouseLibrary()[activeH].name)}</h2></div><div class="horoscope-place">${esc(state.cityName)} · ${esc(c.cuspSign.name)} on H${activeH} · ${esc(c.midNak.name)}</div></div>
+    <div class="house-tabs">${Array.from({length:12},(_,i)=>i+1).map(h=>`<button data-house-forecast="${h}" class="${activeH===h?'active':''}${a?.climateHouse===h?' location-house':''}"><b>H${h}</b><span>${esc(activeHouseLibrary()[h].name)}</span></button>`).join('')}</div>
+    <div class="house-location-note">The blue dot is currently in <b>House ${a?.climateHouse||'—'}</b>. ${isMoonChart()?'This page reads the city from Chandra Lagna: Moon sign = House 1, with a new mental-processing forecast cycle at every Moon nakshatra ingress.':'This page reads the city from the sidereal Ascendant: a new external-condition forecast cycle begins when the Ascendant changes signs.'}</div>
+    <div id="locationHoroscopeBody" class="horoscope-body">${houseForecastHTML(activeH)}</div>
   </section>`;
 }
 function climateView(){
@@ -869,10 +991,10 @@ function climateView(){
         <label>Mode<select id="scale">${['City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label>
       </div>
       <div class="panel compact-module">
-        <span class="eyebrow">ASTROLOGY</span>
+        <span class="eyebrow">${isMoonChart()?'MOON CHART':'ASTROLOGY'}</span>
         <div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div>
-        <label>Ascendant source<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label>
-        <div class="module-fact"><span>ASC</span><b>${formatLon(activeAsc())}</b></div>
+        ${isMoonChart()?'':`<label>Ascendant source<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label>`}
+        <div class="module-fact"><span>${isMoonChart()?'Moon anchor':'ASC'}</span><b>${isMoonChart()?`${formatLon(moonRecord()?.longitude??chartAnchorLongitude())} · ${nakInfo(moonRecord()?.longitude??chartAnchorLongitude()).name}`:formatLon(activeAsc())}</b></div><div class="module-fact"><span>Forecast cycle valid until</span><b>${esc(formatBoundary(chartBoundaryDate()))}</b></div>
         <div class="module-fact"><span>Local time</span><b>${esc(state.localDateTime.replace('T',' '))}</b></div>
         <div class="module-actions"><button id="useNow" class="action secondary compact">Now</button><button id="calculate" class="action primary compact" ${state.engineStatus==='loading'?'disabled':''}>Refresh transit</button></div>
       </div>
@@ -885,7 +1007,7 @@ function climateView(){
     <section class="panel wheel-panel primary-map-panel">
       <div class="map-toolbar persistent-map-toolbar"><button id="fullscreenMap" class="action secondary compact">⛶ Fullscreen map</button></div>
       <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">CITY STREET INDEX</span><b>Live zodiac · nakshatra · planet classification</b></div><div class="street-index-actions"><button id="refreshStreetIndex" class="mini-button" title="Refresh road cache">↻</button></div></div><div class="street-index-tabs"><button data-street-view="nakshatra" class="${state.streetIndexView==='nakshatra'?'active':''}">By Nakshatra</button><button data-street-view="street" class="${state.streetIndexView==='street'?'active':''}">By Street</button><button data-street-view="planet" class="${state.streetIndexView==='planet'?'active':''}">By Planet</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'Road index loads automatically after city selection.')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
-      <div class="map-caption"><span>${esc(state.cityName)} fixed wheel</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span><span>${state.roadNetworkCount?`${state.roadNetworkCount.toLocaleString()} named roads indexed`:'street network not indexed'}</span></div>
+      <div class="map-caption"><span>${esc(state.cityName)} · ${esc(chartPageTitle())}</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span><span>${state.roadNetworkCount?`${state.roadNetworkCount.toLocaleString()} named roads indexed`:'street network not indexed'}</span></div>
     </section>
   </div>
   ${cityForecastDashboard()}
@@ -902,7 +1024,7 @@ function settingsView(){
         <div><span>Zodiac</span><b>Sidereal</b></div>
         <div><span>Ayanamsa</span><b>Lahiri</b></div>
         <div><span>Nodes</span><b>Mean Rahu/Ketu</b></div>
-        <div><span>Houses</span><b>Climate houses + Whole Sign support</b></div>
+        <div><span>Ascendant page</span><b>Sidereal ASC · 12 geographic houses</b></div><div><span>Moon page</span><b>Chandra Lagna · Moon sign as House 1</b></div><div><span>Moon refresh</span><b>Every nakshatra ingress</b></div>
         <div><span>Outer planets</span><b>Uranus · Neptune · Pluto</b></div>
         <div><span>Wheel orientation</span><b>ASC East · DSC West</b></div>
       </div>
@@ -942,7 +1064,7 @@ function updateGeographicWheel(){
 }
 function viewCenter(){return state.scale==='City'?[state.cityLatitude,state.cityLongitude]:[state.latitude,state.longitude]}
 function initClimateMap(){
-  if(state.tab!=='climate'||!window.L)return;
+  if(!['climate','moon'].includes(state.tab)||!window.L)return;
   const el=document.querySelector('#climateMap');if(!el)return;
   if(state.map){try{state.map.remove()}catch{}state.map=null;state.mapMarker=null;state.mapPointMarker=null;state.mapEpicenterMarker=null;state.mapWheelMarker=null}
   const zoom=scaleConfig().zoom;state.mapZoom=zoom;
@@ -969,17 +1091,17 @@ function moveMapToState(){
   updateGeographicWheel();
 }
 
-function render(){document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Climate Scope'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav></aside><main><header><div><span class="eyebrow">SIDEREAL ASTROLOGY PLATFORM</span><h1>${state.tab==='climate'?'Climate Scope':'Settings'}</h1></div><div class="pill">Lahiri · 27 Nakshatras · Bhavat Bhavam</div></header>${state.tab==='climate'?climateView():settingsView()}</main></div>`;bind();initClimateMap()}
+function render(){const chartTab=state.tab==='climate'||state.tab==='moon';document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Ascendant Climate'],['moon','☽','Moon Climate'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav></aside><main><header><div><span class="eyebrow">${chartTab?esc(chartPageSubtitle()):'SIDEREAL ASTROLOGY PLATFORM'}</span><h1>${chartTab?esc(chartPageTitle()):'Settings'}</h1></div><div class="pill">${chartTab?`Valid until ${esc(formatBoundary(chartBoundaryDate()))}`:'Lahiri · 27 Nakshatras · Bhavat Bhavam'}</div></header>${chartTab?climateView():settingsView()}</main></div>`;bind();initClimateMap()}
 
 function bind(){
-  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;render()});
+  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;if(state.roadWays.length&&['climate','moon'].includes(state.tab))reclassifyRoadNetwork();state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);state.houseForecast=null;render()});
   ['ascSign','ascDegree','ascMinute','ascSecond'].forEach(id=>{const e=document.querySelector('#'+id);if(e)e.onchange=()=>{state.profile[id]=e.value;save();render()}});
   const scale=document.querySelector('#scale');if(scale)scale.onchange=()=>{state.scale=scale.value;render()};
   const ascSource=document.querySelector('#ascSource');if(ascSource)ascSource.onchange=()=>{state.useLiveAsc=ascSource.value==='live';render()};
   const lat=document.querySelector('#latitude');if(lat)lat.onchange=()=>{state.latitude=+lat.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
   const lon=document.querySelector('#longitude');if(lon)lon.onchange=()=>{state.longitude=+lon.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
-  const dt=document.querySelector('#localDateTime');if(dt)dt.onchange=()=>state.localDateTime=dt.value;
-  const nowBtn=document.querySelector('#useNow');if(nowBtn)nowBtn.onclick=()=>{state.localDateTime=toZonedInput(new Date(),state.timeZone);render()};
+  const dt=document.querySelector('#localDateTime');if(dt)dt.onchange=()=>{state.localDateTime=dt.value;state.liveNow=false};
+  const nowBtn=document.querySelector('#useNow');if(nowBtn)nowBtn.onclick=()=>{state.liveNow=true;state.localDateTime=toZonedInput(new Date(),state.timeZone);calculateTransit()};
   const saveKey=document.querySelector('#saveMapKey');if(saveKey)saveKey.onclick=()=>{const e=document.querySelector('#maptilerKey');const v=(e?.value||'').trim();if(v){state.maptilerKey=v;safeSet('maptilerKey',v);render()}};
   const changeKey=document.querySelector('#changeMapKey');if(changeKey)changeKey.onclick=()=>{state.maptilerKey='';state.mapKeyTest='';try{localStorage.removeItem('maptilerKey')}catch{};render()};
   const testKey=document.querySelector('#testMapKey');if(testKey)testKey.onclick=testMapKey;
@@ -990,11 +1112,20 @@ function bind(){
   document.querySelectorAll('[data-street-view]').forEach(b=>b.onclick=()=>{state.streetIndexView=b.dataset.streetView;updateStreetIndexPanel();renderStreetViewTabs()});const refreshStreet=document.querySelector('#refreshStreetIndex');if(refreshStreet)refreshStreet.onclick=async()=>{await clearRoadCacheForCity();state.roadWays=[];state.roadNetwork=[];state.streetIndex=[];state.roadNetworkCount=0;await buildCityRoadNetwork(true)};
   document.onfullscreenchange=()=>{if(state.map)setTimeout(()=>state.map.invalidateSize(),80);if(document.fullscreenElement?.id==='mapFullscreenShell'){if(state.roadNetwork.length)buildStreetIndex(false);else if(state.autoStreetLoad)buildCityRoadNetwork(false)}};
   document.querySelectorAll('[data-search-result]').forEach(b=>b.onclick=()=>selectSearchResult(+b.dataset.searchResult));
-  document.querySelectorAll('[data-horoscope-area]').forEach(b=>b.onclick=()=>{state.horoscopeArea=b.dataset.horoscopeArea;render()});
+  document.querySelectorAll('[data-house-forecast]').forEach(b=>b.onclick=()=>{state.houseForecast=+b.dataset.houseForecast;render()});
   const loc=document.querySelector('#useLocation');if(loc)loc.onclick=()=>{if(!navigator.geolocation){state.engineMessage='Browser geolocation is unavailable.';render();return}loc.disabled=true;loc.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{state.latitude=+pos.coords.latitude.toFixed(6);state.longitude=+pos.coords.longitude.toFixed(6);state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);render()},err=>{state.engineMessage=`Location not available: ${err.message}`;render()},{enableHighAccuracy:true,timeout:10000})};
   const centerMap=document.querySelector('#centerMap');if(centerMap)centerMap.onclick=()=>{const a=document.querySelector('#latitude'),o=document.querySelector('#longitude');state.latitude=+a.value;state.longitude=+o.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
   const calc=document.querySelector('#calculate');if(calc)calc.onclick=()=>calculateTransit();
 }
 
+function checkLiveChartCycle(){
+  if(!state.liveNow||!state.swe||state.engineStatus==='calculating')return;
+  const boundary=chartBoundaryDate();
+  if(boundary&&Date.now()>=new Date(boundary).getTime()){
+    state.localDateTime=toZonedInput(new Date(),state.timeZone);
+    calculateTransit();
+  }
+}
 try{render()}catch(err){console.error('Initial render failed',err);const root=document.querySelector('#app');if(root)root.innerHTML=`<main style="padding:24px;font-family:Arial,sans-serif;color:#fff;background:#0b0e17;min-height:100vh"><h1>Vedic Climate Scope</h1><p>The interface hit a browser startup error.</p><pre style="white-space:pre-wrap;color:#ffb4b4">${esc(err?.message||err)}</pre></main>`}
 initEngine();
+setInterval(checkLiveChartCycle,30000);

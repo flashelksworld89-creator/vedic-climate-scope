@@ -308,3 +308,18 @@
 .planet-index-row .street-index-head b{font-size:14px}
 .street-index-body{scrollbar-width:thin}
 @media(max-width:520px){.street-index-tabs{grid-template-columns:1fr}.zone-chip{white-space:normal}}
+
+/* V3.2 house-centered city horoscope */
+.house-horoscope-panel{display:grid;gap:16px}
+.house-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.house-tabs button{min-width:0;border:1px solid #30374f;background:#0c1019;color:#aeb7cf;border-radius:11px;padding:10px 8px;cursor:pointer;display:grid;gap:4px;text-align:left}
+.house-tabs button b{font-size:13px;color:#eef2ff}
+.house-tabs button span{font-size:9px;line-height:1.25;color:#7f8aa8}
+.house-tabs button.active{border-color:#a873f0;background:#21172f;color:#fff}
+.house-tabs button.location-house{box-shadow:inset 0 0 0 1px #59b8ff}
+.house-tabs button.location-house::after{content:'blue dot';font-size:8px;color:#79c8ff;text-transform:uppercase;letter-spacing:.08em}
+.house-location-note{border:1px solid #2e354b;background:#0d121d;border-radius:11px;padding:11px 13px;color:#98a4c0;font-size:11px;line-height:1.5}
+.house-location-note b{color:#dbe7ff}
+.house-forecast .forecast-theme{font-size:16px;line-height:1.55}
+@media(max-width:950px){.house-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:600px){.house-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}.house-tabs button{padding:9px 7px}}
