@@ -84,6 +84,62 @@ const HOUSE_THEMES={
 1:['self-direction','initiative','identity'],2:['money-values','resources','speech'],3:['communication','short travel','neighbors'],4:['home-family','roots','emotional security'],5:['creativity-romance','children','speculation'],6:['work-routines','service','obstacles'],7:['relationships-partnerships','agreements','other people'],8:['shared resources','private matters','change'],9:['long travel','beliefs','higher learning'],10:['career-public life','responsibility','status'],11:['income-gains','networks','goals'],12:['retreat-expenses','foreign places','closure']
 };
 const SIGN_LORDS={Aries:'Mars',Taurus:'Venus',Gemini:'Mercury',Cancer:'Moon',Leo:'Sun',Virgo:'Mercury',Libra:'Venus',Scorpio:'Mars',Sagittarius:'Jupiter',Capricorn:'Saturn',Aquarius:'Saturn',Pisces:'Jupiter'};
+const OWN_SIGNS={Sun:['Leo'],Moon:['Cancer'],Mars:['Aries','Scorpio'],Mercury:['Gemini','Virgo'],Jupiter:['Sagittarius','Pisces'],Venus:['Taurus','Libra'],Saturn:['Capricorn','Aquarius']};
+const MOOLATRIKONA={Sun:'Leo',Moon:'Taurus',Mars:'Aries',Mercury:'Virgo',Jupiter:'Sagittarius',Venus:'Libra',Saturn:'Aquarius'};
+const EXALTATION={Sun:{sign:'Aries',degree:10},Moon:{sign:'Taurus',degree:3},Mars:{sign:'Capricorn',degree:28},Mercury:{sign:'Virgo',degree:15},Jupiter:{sign:'Cancer',degree:5},Venus:{sign:'Pisces',degree:27},Saturn:{sign:'Libra',degree:20}};
+const DEBILITATION={Sun:{sign:'Libra',degree:10},Moon:{sign:'Scorpio',degree:3},Mars:{sign:'Cancer',degree:28},Mercury:{sign:'Pisces',degree:15},Jupiter:{sign:'Capricorn',degree:5},Venus:{sign:'Virgo',degree:27},Saturn:{sign:'Aries',degree:20}};
+const NATURAL_RELATIONSHIPS={
+Sun:{friends:['Moon','Mars','Jupiter'],neutral:['Mercury'],enemies:['Venus','Saturn']},
+Moon:{friends:['Sun','Mercury'],neutral:['Mars','Jupiter','Venus','Saturn'],enemies:[]},
+Mars:{friends:['Sun','Moon','Jupiter'],neutral:['Venus','Saturn'],enemies:['Mercury']},
+Mercury:{friends:['Sun','Venus'],neutral:['Mars','Jupiter','Saturn'],enemies:['Moon']},
+Jupiter:{friends:['Sun','Moon','Mars'],neutral:['Saturn'],enemies:['Mercury','Venus']},
+Venus:{friends:['Mercury','Saturn'],neutral:['Mars','Jupiter'],enemies:['Sun','Moon']},
+Saturn:{friends:['Mercury','Venus'],neutral:['Jupiter'],enemies:['Sun','Moon','Mars']}
+};
+const PLANET_NATURES={
+Sun:{nature:'authoritative',keywords:['visibility','leadership','authority','clarity']},
+Moon:{nature:'responsive',keywords:['public mood','movement','care','changeability']},
+Mars:{nature:'forceful',keywords:['action','competition','heat','cutting through']},
+Mercury:{nature:'analytical',keywords:['messages','commerce','traffic','coordination']},
+Jupiter:{nature:'expansive',keywords:['growth','guidance','opportunity','institutions']},
+Venus:{nature:'harmonizing',keywords:['attraction','exchange','comfort','social activity']},
+Saturn:{nature:'restrictive',keywords:['delay','structure','labor','durability']},
+Rahu:{nature:'amplifying',keywords:['novelty','intensity','technology','disruption']},
+Ketu:{nature:'separating',keywords:['release','specialization','withdrawal','sharp insight']},
+Uranus:{nature:'disruptive',keywords:['sudden change','innovation','breaks in routine']},
+Neptune:{nature:'diffuse',keywords:['uncertainty','idealization','blurred boundaries']},
+Pluto:{nature:'intensifying',keywords:['power','purging','deep change','pressure']}
+};
+const NAKSHATRA_DATA={
+Ashwini:{deity:'Ashwini Kumaras',symbol:'Horse head',motivation:'Dharma',quality:'swift healing and initiation'},
+Bharani:{deity:'Yama',symbol:'Yoni',motivation:'Artha',quality:'bearing pressure, restraint, and consequences'},
+Krittika:{deity:'Agni',symbol:'Razor / flame',motivation:'Kama',quality:'purification, separation, and decisive clarity'},
+Rohini:{deity:'Brahma',symbol:'Cart',motivation:'Moksha',quality:'growth, attraction, and material development'},
+Mrigashira:{deity:'Soma',symbol:'Deer head',motivation:'Moksha',quality:'searching, curiosity, and movement'},
+Ardra:{deity:'Rudra',symbol:'Teardrop',motivation:'Kama',quality:'disruption, release, and rebuilding'},
+Punarvasu:{deity:'Aditi',symbol:'Bow / quiver',motivation:'Artha',quality:'return, restoration, and renewed opportunity'},
+Pushya:{deity:'Brihaspati',symbol:'Udder / flower',motivation:'Dharma',quality:'support, nourishment, and duty'},
+Ashlesha:{deity:'Nagas',symbol:'Serpent',motivation:'Dharma',quality:'binding, strategy, and concealed complexity'},
+Magha:{deity:'Pitris',symbol:'Throne',motivation:'Artha',quality:'authority, legacy, and inherited structures'},
+'Purva Phalguni':{deity:'Bhaga',symbol:'Hammock / bed',motivation:'Kama',quality:'pleasure, creativity, and social exchange'},
+'Uttara Phalguni':{deity:'Aryaman',symbol:'Bed / patronage',motivation:'Moksha',quality:'agreements, patronage, and durable commitments'},
+Hasta:{deity:'Savitar',symbol:'Hand',motivation:'Moksha',quality:'skill, handling, and practical control'},
+Chitra:{deity:'Vishvakarma',symbol:'Jewel',motivation:'Kama',quality:'design, construction, and visible refinement'},
+Swati:{deity:'Vayu',symbol:'Young shoot',motivation:'Artha',quality:'independence, movement, and negotiation'},
+Vishakha:{deity:'Indra-Agni',symbol:'Triumphal arch',motivation:'Dharma',quality:'focus, competition, and goal pursuit'},
+Anuradha:{deity:'Mitra',symbol:'Lotus',motivation:'Dharma',quality:'alliances, loyalty, and persistence'},
+Jyeshtha:{deity:'Indra',symbol:'Earring / talisman',motivation:'Artha',quality:'seniority, protection, and high-stakes decisions'},
+Mula:{deity:'Nirriti',symbol:'Roots',motivation:'Kama',quality:'root causes, dismantling, and deep investigation'},
+'Purva Ashadha':{deity:'Apas',symbol:'Fan / tusk',motivation:'Moksha',quality:'advocacy, cleansing, and conviction'},
+'Uttara Ashadha':{deity:'Vishvadevas',symbol:'Elephant tusk',motivation:'Moksha',quality:'endurance, responsibility, and lasting outcomes'},
+Shravana:{deity:'Vishnu',symbol:'Ear',motivation:'Artha',quality:'listening, learning, routes, and information flow'},
+Dhanishta:{deity:'Vasus',symbol:'Drum',motivation:'Dharma',quality:'resources, rhythm, coordination, and groups'},
+Shatabhisha:{deity:'Varuna',symbol:'Empty circle',motivation:'Dharma',quality:'systems, isolation, diagnosis, and repair'},
+'Purva Bhadrapada':{deity:'Aja Ekapada',symbol:'Front of bier',motivation:'Artha',quality:'intensity, ideals, and sharp transitions'},
+'Uttara Bhadrapada':{deity:'Ahir Budhnya',symbol:'Back of bier',motivation:'Kama',quality:'depth, stabilization, and long-range consequences'},
+Revati:{deity:'Pushan',symbol:'Fish / drum',motivation:'Moksha',quality:'guidance, completion, protection, and passage'}
+};
 const SIGN_TONES={Aries:'direct and fast-moving',Taurus:'steady and practical',Gemini:'mobile and information-heavy',Cancer:'protective and emotionally responsive',Leo:'visible and expressive',Virgo:'analytical and detail-focused',Libra:'relational and balance-seeking',Scorpio:'private and intense',Sagittarius:'expansive and exploratory',Capricorn:'structured and duty-focused',Aquarius:'social and unconventional',Pisces:'reflective and porous'};
 const NAK_TONES={Ashwini:'quick starts and recovery',Bharani:'pressure, limits, and decisive choices',Krittika:'sorting, cutting away, and clarity',Rohini:'growth, comfort, and attraction',Mrigashira:'searching, movement, and curiosity',Ardra:'disruption, intensity, and clearing',Punarvasu:'return, repair, and renewal',Pushya:'support, nourishment, and responsibility',Ashlesha:'strategy, entanglement, and subtle motives',Magha:'authority, ancestry, and status','Purva Phalguni':'pleasure, creativity, and social ease','Uttara Phalguni':'agreements, support, and durable commitments',Hasta:'skill, handling, and practical control',Chitra:'design, refinement, and visible results',Swati:'independence, movement, and negotiation',Vishakha:'focus, ambition, and competing goals',Anuradha:'alliances, persistence, and loyalty',Jyeshtha:'seniority, protection, and high-pressure decisions',Mula:'root causes, removal, and deep change','Purva Ashadha':'advocacy, momentum, and conviction','Uttara Ashadha':'endurance, responsibility, and lasting outcomes',Shravana:'listening, learning, and information flow',Dhanishta:'resources, rhythm, and group activity',Shatabhisha:'distance, systems, and problem-solving','Purva Bhadrapada':'intensity, ideals, and sharp transitions','Uttara Bhadrapada':'stability, depth, and long-range perspective',Revati:'completion, guidance, and safe passage'};
 const AREA_RULES={
@@ -123,10 +179,68 @@ function strongestVedicDrishti(names){
   for(const h of hits.sort((a,b)=>a.orb-b.orb)){const k=`${h.from.name}|${h.to.name}|${h.type}`;if(!seen.has(k)){seen.add(k);uniq.push(h)}}
   return uniq[0]||null
 }
+function relationshipStatus(planet,hostLord){
+  const rel=NATURAL_RELATIONSHIPS[planet];
+  if(!rel||!hostLord||planet===hostLord)return planet===hostLord?'own':'unclassified';
+  if(rel.friends.includes(hostLord))return 'friend';
+  if(rel.enemies.includes(hostLord))return 'enemy';
+  return 'neutral';
+}
+function dignityForRecord(rec){
+  if(!rec||!OWN_SIGNS[rec.name])return {level:'supplemental',score:0,label:'supplemental planet'};
+  const ex=EXALTATION[rec.name],de=DEBILITATION[rec.name],mt=MOOLATRIKONA[rec.name];
+  if(ex?.sign===rec.sign)return {level:'exalted',score:4,label:`exalted in ${rec.sign}`};
+  if(de?.sign===rec.sign)return {level:'debilitated',score:-4,label:`debilitated in ${rec.sign}`};
+  if(mt===rec.sign)return {level:'moolatrikona',score:3,label:`moolatrikona sign ${rec.sign}`};
+  if(OWN_SIGNS[rec.name].includes(rec.sign))return {level:'own',score:2,label:`own sign ${rec.sign}`};
+  const host=SIGN_LORDS[rec.sign],rel=relationshipStatus(rec.name,host);
+  if(rel==='friend')return {level:'friendly',score:1,label:`friend ${host}'s sign`};
+  if(rel==='enemy')return {level:'enemy',score:-1,label:`enemy ${host}'s sign`};
+  return {level:'neutral',score:0,label:`neutral ${host}'s sign`};
+}
+function angularClosenessToPeak(rec,table){
+  const rule=table[rec?.name];if(!rule||rule.sign!==rec.sign)return null;
+  return Math.abs(rec.signDegree-rule.degree);
+}
+function placementStrength(rec){
+  if(!rec)return {score:0,reasons:[]};
+  const dignity=dignityForRecord(rec),reasons=[dignity.label];
+  let score=dignity.score;
+  const exOrb=angularClosenessToPeak(rec,EXALTATION),deOrb=angularClosenessToPeak(rec,DEBILITATION);
+  if(exOrb!==null&&exOrb<=5){score+=1;reasons.push(`near exaltation peak (${exOrb.toFixed(1)}°)`)}
+  if(deOrb!==null&&deOrb<=5){score-=1;reasons.push(`near debilitation peak (${deOrb.toFixed(1)}°)`)}
+  if(rec.retrograde){score+=.25;reasons.push('retrograde: intensified/reworked expression')}
+  return {score,reasons,dignity};
+}
+function temporaryRelationship(a,b){
+  if(!a||!b||a.name===b.name)return null;
+  const signDistance=(Math.floor(norm(b.longitude-a.longitude)/30)+1);
+  return [2,3,4,10,11,12].includes(signDistance)?'temporary friend':'temporary enemy';
+}
+function compoundRelationship(a,b){
+  if(!a||!b||a.name===b.name)return 'same planet';
+  const nat=relationshipStatus(a.name,b.name),temp=temporaryRelationship(a,b);
+  const map={
+    'friend|temporary friend':'great friend','friend|temporary enemy':'neutral',
+    'neutral|temporary friend':'friend','neutral|temporary enemy':'enemy',
+    'enemy|temporary friend':'neutral','enemy|temporary enemy':'bitter enemy',
+    'own|temporary friend':'great friend','own|temporary enemy':'neutral'
+  };
+  return map[`${nat}|${temp}`]||`${nat}, ${temp}`;
+}
+function classicalInfluenceScore(rec){
+  if(!rec)return 0;
+  const strength=placementStrength(rec).score;
+  const d=rec.drishti||{casts:[],receives:[]};
+  const aspectWeight=(d.casts?.length||0)*.35+(d.receives?.length||0)*.25;
+  return strength+aspectWeight+(rec.retrograde?.2:0);
+}
+function nakshatraDetail(name){return NAKSHATRA_DATA[name]||{deity:'—',symbol:'—',motivation:'—',quality:NAK_TONES[name]||'changing conditions'}}
+function rankKeyPlanets(records){return records.filter(Boolean).map(rec=>({rec,score:classicalInfluenceScore(rec)})).sort((a,b)=>Math.abs(b.score)-Math.abs(a.score))}
 function keyPlanetSummary(rec,label){
   if(!rec)return null;
-  const cast=rec.drishti?.casts?.[0],received=rec.drishti?.receives?.[0];
-  let tail='';
+  const cast=rec.drishti?.casts?.[0],received=rec.drishti?.receives?.[0],strength=placementStrength(rec);
+  let tail=` · ${strength.dignity.label}`;
   if(cast)tail+=` · casts ${cast.type} to ${cast.to.name}`;
   if(received)tail+=` · receives ${received.type} from ${received.from.name}`;
   return `${label}: ${rec.name} in ${rec.sign} ${rec.signDegree.toFixed(1)}° · ${rec.nak.name} · Climate House ${rec.climateHouse}${rec.retrograde?' ℞':''}${tail}`
@@ -154,54 +268,47 @@ function manifestationPool(a,area){
 function forecastForLocation(area=state.horoscopeArea){
   const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
   if(!a)return null;
-  const signLordName=SIGN_LORDS[a.sign];
-  const nakLordName=a.nak.lord;
-  const governors=a.governors||[];
-  const signLord=planetClimateRecord(signLordName);
-  const nakLord=planetClimateRecord(nakLordName);
-  const governorRecords=governors.map(g=>planetClimateRecord(g.name)).filter(Boolean);
-  const moon=planetClimateRecord('Moon');
-  const derived=bhavatBhavamHouse(a.climateHouse);
-  const relevantNames=uniquePhrases([signLordName,nakLordName,...governors.map(g=>g.name),'Moon']);
-  const strongest=strongestAspectForNames(relevantNames);
-  const strongestDrishti=strongestVedicDrishti(relevantNames);
-  const lordConnection=relationshipBetween(signLordName,nakLordName);
-  const tone=NAK_TONES[a.nak.name]||'changing conditions';
+  const signLordName=SIGN_LORDS[a.sign],nakLordName=a.nak.lord,governors=a.governors||[];
+  const signLord=planetClimateRecord(signLordName),nakLord=planetClimateRecord(nakLordName),governorRecords=governors.map(g=>planetClimateRecord(g.name)).filter(Boolean),moon=planetClimateRecord('Moon');
+  const derived=bhavatBhavamHouse(a.climateHouse),nakData=nakshatraDetail(a.nak.name);
+  const coreRecords=uniquePhrases([signLordName,nakLordName,...governors.map(g=>g.name),'Moon']).map(planetClimateRecord).filter(Boolean);
+  const ranked=rankKeyPlanets(coreRecords),dominant=ranked[0]?.rec||governorRecords[0]||nakLord||signLord;
+  const strongest=strongestAspectForNames(coreRecords.map(r=>r.name)),strongestDrishti=strongestVedicDrishti(coreRecords.map(r=>r.name));
+  const lordConnection=relationshipBetween(signLordName,nakLordName),lordCompound=signLord&&nakLord?compoundRelationship(signLord,nakLord):null;
   const signTone=SIGN_TONES[a.sign]||'mixed conditions';
 
-  // Rank the local factors so the visible forecast stays short.
-  const activator=governorRecords[0]||nakLord||signLord;
-  let theme=`${a.sign} / ${a.nak.name} gives this area a ${signTone} climate centered on ${tone}.`;
-  if(activator)theme+=` ${activator.name} is the strongest immediate activator in this reading.`;
+  let theme=`${a.sign} / ${a.nak.name} gives this area a ${signTone} field shaped by ${nakData.quality}.`;
+  if(dominant){const st=placementStrength(dominant);theme+=` ${dominant.name} carries the strongest current weight${st.score>1?' from a strong placement':st.score<0?' despite a pressured placement':''}.`}
 
   const manifestations=manifestationPool(a,area);
-  if(signLord&&nakLord&&signLord.name!==nakLord.name){
-    if(lordConnection&&['square','opposition'].includes(lordConnection.type))manifestations.unshift(`${signLord.name} and ${nakLord.name} are under competing pressure, so local conditions may require adjustment rather than a straight path.`);
-    else if(lordConnection)manifestations.unshift(`${signLord.name} and ${nakLord.name} are directly connected by ${lordConnection.type}, tying the sign and nakshatra themes together.`);
+  if(lordCompound&&signLordName!==nakLordName){
+    if(/enemy/.test(lordCompound))manifestations.unshift(`${signLordName} and ${nakLordName} are operating through a strained compound relationship, so the area may show mixed signals or require more adjustment.`);
+    else if(/friend/.test(lordCompound))manifestations.unshift(`${signLordName} and ${nakLordName} are operating through a supportive compound relationship, helping the sign and nakshatra themes reinforce one another.`);
   }
+  if(dominant){const nat=PLANET_NATURES[dominant.name];if(nat?.keywords?.length)manifestations.push(`${dominant.name} emphasizes ${nat.keywords.slice(0,2).join(' and ')} in this zone.`)}
   const compactManifestations=uniquePhrases(manifestations).slice(0,3);
 
-  const bestUse=`Best use: favor ${a.sign==='Virgo'?'planning, sorting, and careful execution':a.sign==='Taurus'?'steady practical action':a.sign==='Gemini'?'communication, comparison, and flexible movement':a.sign==='Scorpio'?'research, discretion, and focused problem-solving':a.sign==='Sagittarius'?'exploration, learning, and wider perspective':'actions that fit the location’s main theme'} rather than forcing unrelated activity.`;
+  const bestMap={Aries:'direct action and quick decisions',Taurus:'steady practical work and resource-building',Gemini:'communication, comparison, and flexible movement',Cancer:'supportive activity and protection',Leo:'visible leadership and decisive coordination',Virgo:'planning, sorting, and careful execution',Libra:'negotiation, balance, and agreements',Scorpio:'research, discretion, and focused problem-solving',Sagittarius:'exploration, learning, and wider perspective',Capricorn:'structured effort and long-range planning',Aquarius:'systems thinking, networks, and experimentation',Pisces:'reflection, guidance, and adaptable pacing'};
+  const bestUse=`Best use: favor ${bestMap[a.sign]||'actions that fit the location’s main theme'} rather than forcing unrelated activity.`;
 
   let caution=`Watch for: ${['Ardra','Ashlesha','Jyeshtha','Mula','Purva Bhadrapada'].includes(a.nak.name)?'intensity, overreaction, or hidden complications':'scattering attention or overinterpreting minor signals'}.`;
-  if(strongestDrishti)caution=`Watch for: ${strongestDrishti.from.name} casts its ${strongestDrishti.type} to ${strongestDrishti.to.name}, which can strongly modify this zone.`;
-  else if(strongest)caution=`Watch for: ${strongest.a.name} ${strongest.type} ${strongest.b.name} can add ${['square','opposition'].includes(strongest.type)?'friction or competing pressures':'extra momentum'} around this zone.`;
+  if(dominant&&placementStrength(dominant).score<=-2)caution=`Watch for: ${dominant.name} is under a weakened dignity condition, so its themes may require extra patience or correction.`;
+  if(strongestDrishti)caution=`Watch for: ${strongestDrishti.from.name} casts its ${strongestDrishti.type} to ${strongestDrishti.to.name}, strongly modifying the area climate.`;
+  else if(strongest&&['square','opposition'].includes(strongest.type))caution=`Watch for: ${strongest.a.name} ${strongest.type} ${strongest.b.name} can create competing pressures around this zone.`;
 
   const why=[
     `Climate House ${a.climateHouse} → Bhavat Bhavam House ${derived}`,
     `${a.sign} ${a.signDegree.toFixed(2)}° · sign lord ${signLordName}`,
-    `${a.nak.name} Pada ${a.nak.pada} · nakshatra lord ${nakLordName}`,
+    `${a.nak.name} Pada ${a.nak.pada} · lord ${nakLordName} · deity ${nakData.deity} · ${nakData.motivation}`,
     governors.length?`Transit governor${governors.length>1?'s':''}: ${governors.map(g=>g.name).join(', ')}`:'No planet currently occupies this nakshatra',
-    keyPlanetSummary(signLord,'Sign lord'),
-    keyPlanetSummary(nakLord,'Nakshatra lord'),
+    keyPlanetSummary(signLord,'Sign lord'),keyPlanetSummary(nakLord,'Nakshatra lord'),
     governorRecords[0]?keyPlanetSummary(governorRecords[0],'Transit governor'):null,
-    moon?`Moon: ${moon.sign} ${moon.signDegree.toFixed(1)}° · ${moon.nak.name} · Climate House ${moon.climateHouse}`:null,
+    moon?`Moon: ${moon.sign} ${moon.signDegree.toFixed(1)}° · ${moon.nak.name} · Climate House ${moon.climateHouse} · ${placementStrength(moon).dignity.label}`:null,
+    lordCompound&&signLordName!==nakLordName?`${signLordName} ↔ ${nakLordName}: ${lordCompound}`:null,
     areaEmphasis(a,area)
   ].filter(Boolean);
   if(lordConnection)why.push(`${signLordName} ${lordConnection.type} ${nakLordName} · orb ${lordConnection.orb.toFixed(2)}°`);
   if(strongestDrishti)why.push(`${strongestDrishti.from.name} casts ${strongestDrishti.type} to ${strongestDrishti.to.name} · orb ${strongestDrishti.orb.toFixed(2)}°`);
-  if(strongest&&!why.some(x=>x.includes(`${strongest.a.name} ${strongest.type} ${strongest.b.name}`)))why.push(`${strongest.a.name} ${strongest.type} ${strongest.b.name} · orb ${strongest.orb.toFixed(2)}°`);
-
   return {theme,manifestations:compactManifestations,bestUse,caution,why:uniquePhrases(why)}
 }
 function forecastHTML(area=state.horoscopeArea){
