@@ -36,3 +36,7 @@ Replace the existing repository files with this version and commit. Vercel shoul
 - Every planet, Rahu, and Ketu shows its sidereal degree/minute directly on the wheel.
 - A compact **Exact placements** disclosure is available in the Astrology/Moon Chart panel on both climate pages.
 - The Moon page retains Moon H1/H7 while also showing the actual ASC/DSC positions and degrees around the wheel.
+
+
+## v3.5 time navigation
+Both Ascendant Climate and Moon Climate include a visible transit date/time picker plus -1 day, -1 hour, Now, +1 hour, and +1 day controls. Moving away from Now switches to manual time mode and recalculates the full sidereal transit, houses, forecasts, and cached street classifications for the selected moment. Press Now to resume live automatic chart-cycle updates.

@@ -329,3 +329,13 @@
 .angle-marker circle{fill:#0b0f19;fill-opacity:.88;stroke-width:1.6}.angle-marker.asc-marker circle{stroke:#ffd166}.angle-marker.dsc-marker circle{stroke:#9dc2ff}.angle-label{font-size:7.5px;font-weight:950;fill:#f6f8ff;paint-order:stroke;stroke:#070910;stroke-width:1.2px}.angle-degree{font-size:6.7px;font-weight:850;fill:#dfe6ff;paint-order:stroke;stroke:#070910;stroke-width:1.2px}.moon-axis-label{font-size:10px}
 .transit-row.angle-row{border-color:#3a4159;background:#101522}
 .placement-disclosure{margin-top:12px;border:1px solid #30374f;border-radius:11px;background:#0c1019;overflow:hidden}.placement-disclosure summary{cursor:pointer;padding:10px 12px;color:#c7cee1;font-size:11px;font-weight:800}.placement-list{display:grid;gap:0;border-top:1px solid #252b3e}.placement-item{display:flex;justify-content:space-between;gap:10px;padding:7px 11px;border-bottom:1px solid #1e2434;font-size:10px}.placement-item:last-child{border-bottom:0}.placement-item b{color:#eef1fb}.placement-item span{color:#aeb8d0;font-variant-numeric:tabular-nums}
+
+.time-picker-label{display:grid;gap:6px;margin-top:10px}
+.time-picker-label input{width:100%;min-width:0}
+.time-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:9px}
+.time-nav button{min-height:38px;border:1px solid var(--line,#2b3350);border-radius:9px;background:#111625;color:#eef2ff;font-weight:700;cursor:pointer}
+.time-nav button:hover{border-color:#7b87bd;background:#171e32}
+.time-nav .now-time{background:#202944;border-color:#52639a}
+.time-mode-note{margin-top:7px;font-size:11px;line-height:1.35;color:#9ba6c8}
+.module-actions.single-action{grid-template-columns:1fr}
+@media(max-width:620px){.time-nav{grid-template-columns:repeat(5,minmax(48px,1fr));overflow-x:auto}.time-nav button{min-width:48px}}

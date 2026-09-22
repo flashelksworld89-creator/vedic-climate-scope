@@ -1017,8 +1017,17 @@ function climateView(){
         ${isMoonChart()?'':`<label>Ascendant source<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label>`}
         <div class="module-fact"><span>${isMoonChart()?'Moon anchor':'ASC'}</span><b>${isMoonChart()?`${formatLon(moonRecord()?.longitude??chartAnchorLongitude())} · ${nakInfo(moonRecord()?.longitude??chartAnchorLongitude()).name}`:formatLon(activeAsc())}</b></div><div class="module-fact"><span>Forecast cycle valid until</span><b>${esc(formatBoundary(chartBoundaryDate()))}</b></div>
         <div class="module-fact"><span>Local time</span><b>${esc(state.localDateTime.replace('T',' '))}</b></div>
+        <label class="time-picker-label">Transit date & time<input id="localDateTime" type="datetime-local" value="${esc(state.localDateTime)}"></label>
+        <div class="time-nav" aria-label="Transit time navigation">
+          <button type="button" data-time-shift="-1440" title="Back one day">−1d</button>
+          <button type="button" data-time-shift="-60" title="Back one hour">−1h</button>
+          <button type="button" id="useNow" class="now-time">Now</button>
+          <button type="button" data-time-shift="60" title="Forward one hour">+1h</button>
+          <button type="button" data-time-shift="1440" title="Forward one day">+1d</button>
+        </div>
+        <div class="time-mode-note">${state.liveNow?'Live mode · chart advances automatically':'Manual time mode · use Now to resume live updates'}</div>
         ${compactPlacements()}
-        <div class="module-actions"><button id="useNow" class="action secondary compact">Now</button><button id="calculate" class="action primary compact" ${state.engineStatus==='loading'?'disabled':''}>Refresh transit</button></div>
+        <div class="module-actions single-action"><button id="calculate" class="action primary compact" ${state.engineStatus==='loading'?'disabled':''}>Refresh transit</button></div>
       </div>
       <div class="panel compact-module">
         <span class="eyebrow">SELECTED POINT</span>
@@ -1115,6 +1124,21 @@ function moveMapToState(){
 
 function render(){const chartTab=state.tab==='climate'||state.tab==='moon';document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Ascendant Climate'],['moon','☽','Moon Climate'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav></aside><main><header><div><span class="eyebrow">${chartTab?esc(chartPageSubtitle()):'SIDEREAL ASTROLOGY PLATFORM'}</span><h1>${chartTab?esc(chartPageTitle()):'Settings'}</h1></div><div class="pill">${chartTab?`Valid until ${esc(formatBoundary(chartBoundaryDate()))}`:'Lahiri · 27 Nakshatras · Bhavat Bhavam'}</div></header>${chartTab?climateView():settingsView()}</main></div>`;bind();initClimateMap()}
 
+
+function shiftTransitTime(minutes){
+  try{
+    const current=zonedInputToDate(state.localDateTime,state.timeZone);
+    const shifted=new Date(current.getTime()+minutes*60000);
+    state.localDateTime=toZonedInput(shifted,state.timeZone);
+    state.liveNow=false;
+    calculateTransit();
+  }catch(err){
+    console.error('Time navigation failed',err);
+    state.engineMessage=`Time navigation error: ${err.message}`;
+    render();
+  }
+}
+
 function bind(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;if(state.roadWays.length&&['climate','moon'].includes(state.tab))reclassifyRoadNetwork();state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);state.houseForecast=null;render()});
   ['ascSign','ascDegree','ascMinute','ascSecond'].forEach(id=>{const e=document.querySelector('#'+id);if(e)e.onchange=()=>{state.profile[id]=e.value;save();render()}});
@@ -1122,7 +1146,8 @@ function bind(){
   const ascSource=document.querySelector('#ascSource');if(ascSource)ascSource.onchange=()=>{state.useLiveAsc=ascSource.value==='live';render()};
   const lat=document.querySelector('#latitude');if(lat)lat.onchange=()=>{state.latitude=+lat.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
   const lon=document.querySelector('#longitude');if(lon)lon.onchange=()=>{state.longitude=+lon.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
-  const dt=document.querySelector('#localDateTime');if(dt)dt.onchange=()=>{state.localDateTime=dt.value;state.liveNow=false};
+  const dt=document.querySelector('#localDateTime');if(dt)dt.onchange=()=>{if(!dt.value)return;state.localDateTime=dt.value;state.liveNow=false;calculateTransit()};
+  document.querySelectorAll('[data-time-shift]').forEach(b=>b.onclick=()=>shiftTransitTime(+b.dataset.timeShift));
   const nowBtn=document.querySelector('#useNow');if(nowBtn)nowBtn.onclick=()=>{state.liveNow=true;state.localDateTime=toZonedInput(new Date(),state.timeZone);calculateTransit()};
   const saveKey=document.querySelector('#saveMapKey');if(saveKey)saveKey.onclick=()=>{const e=document.querySelector('#maptilerKey');const v=(e?.value||'').trim();if(v){state.maptilerKey=v;safeSet('maptilerKey',v);render()}};
   const changeKey=document.querySelector('#changeMapKey');if(changeKey)changeKey.onclick=()=>{state.maptilerKey='';state.mapKeyTest='';try{localStorage.removeItem('maptilerKey')}catch{};render()};
