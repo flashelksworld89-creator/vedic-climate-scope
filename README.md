@@ -19,3 +19,13 @@ Upload all files to the existing GitHub repository and commit. Vercel should red
 
 ## Important
 This version takes date/time in UTC. Address search, city centroid calculation, automatic time-zone resolution and the real geographic map overlay are planned for the next stage.
+
+
+## v1.3 Geographic layer
+
+- Added a real Leaflet/OpenStreetMap base map with no API key.
+- Click the map to move the Personal Climate epicenter.
+- Device geolocation and manual latitude/longitude remain available.
+- Scale presets now change map zoom from World through Street.
+- The translucent 27-nakshatra wheel remains fixed over the map with ASC East and DSC West.
+- Address search is intentionally not connected to the public Nominatim endpoint; a self-hosted geocoder is planned to keep the app key-free and respect public-service usage rules.
