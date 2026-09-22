@@ -27,3 +27,11 @@ No build command is required.
 
 ## Planned calculation architecture
 Astronomical calculations should run from a local/server-side Swiss Ephemeris layer rather than a paid external astrology API. Mapping can use open map data so no Google Maps API key is required.
+
+
+## V1.1 Wheel update
+- Nakshatra names are laid along radial wedge arcs rather than straight horizontal labels.
+- The zodiac and nakshatra rings are semi-transparent for eventual map overlay.
+- Added 108 pada tick marks.
+- Added a temporary map-style underlay so wheel translucency can be evaluated before real mapping is connected.
+- Live planetary positions are still demo values until the sidereal ephemeris engine is added.
