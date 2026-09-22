@@ -400,16 +400,21 @@ function splitBBoxGrid(box,rows=3,cols=3){
   for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)out.push({south:box.south+y*dLat,west:box.west+x*dLon,north:box.south+(y+1)*dLat,east:box.west+(x+1)*dLon});
   return out;
 }
-const OVERPASS_ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const OVERPASS_ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
 async function overpassRoadChunk(box,endpointIndex=0){
-  const q=`[out:json][timeout:70];way[\"highway\"][\"name\"](${box.south.toFixed(6)},${box.west.toFixed(6)},${box.north.toFixed(6)},${box.east.toFixed(6)});out tags geom qt;`;
+  const q=`[out:json][timeout:35];way["highway"]["name"](${box.south.toFixed(6)},${box.west.toFixed(6)},${box.north.toFixed(6)},${box.east.toFixed(6)});out tags geom qt;`;
   let lastErr=null;
   for(let i=0;i<OVERPASS_ENDPOINTS.length;i++){
     const url=OVERPASS_ENDPOINTS[(endpointIndex+i)%OVERPASS_ENDPOINTS.length];
     try{
-      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(q)});
-      if(!r.ok)throw new Error(`HTTP ${r.status}`);
-      const data=await r.json();return data.elements||[];
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),45000);
+      const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'data='+encodeURIComponent(q),signal:controller.signal});
+      clearTimeout(timer);
+      if(!r.ok)throw new Error(`${new URL(url).hostname} returned HTTP ${r.status}`);
+      const data=await r.json();
+      if(!data||!Array.isArray(data.elements))throw new Error(`${new URL(url).hostname} returned an invalid response`);
+      return data.elements;
     }catch(e){lastErr=e}
   }
   throw lastErr||new Error('Road network request failed');
@@ -450,19 +455,43 @@ function drawRoadNetworkLayer(){
 async function buildCityRoadNetwork(force=false){
   if(state.roadNetworkLoading)return;
   if(state.roadNetwork.length&&!force){buildStreetIndexFromNetwork();drawRoadNetworkLayer();updateStreetIndexPanel();return}
-  state.roadNetworkLoading=true;state.streetIndexLoading=true;state.roadNetworkStatus='Loading named city streets from OpenStreetMap…';state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
-  const boxes=splitBBoxGrid(cityBBox(),3,3),byId=new Map();let cursor=0,done=0,failures=0;
-  async function worker(workerIndex){while(cursor<boxes.length){const idx=cursor++;try{const els=await overpassRoadChunk(boxes[idx],workerIndex);for(const el of els)if(el.type==='way'&&el.tags?.name&&el.geometry?.length>1)byId.set(el.id,el)}catch(e){failures++}done++;state.roadNetworkStatus=`Loading streets… ${done}/${boxes.length} map sections`;state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel()}}
-  await Promise.all([worker(0),worker(1)]);
-  state.roadWays=[...byId.values()];const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));
-  state.roadNetwork=segments;state.roadNetworkCount=byId.size;state.roadNetworkLoading=false;state.streetIndexLoading=false;
-  buildStreetIndexFromNetwork();drawRoadNetworkLayer();
-  state.roadNetworkStatus=`Indexed ${byId.size.toLocaleString()} named road ways into ${segments.length.toLocaleString()} astrological street sectors${failures?` · ${failures} map section${failures===1?'':'s'} unavailable`:''}.`;
-  state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();updateCityDashboardPanel();
+  state.roadNetworkLoading=true;state.streetIndexLoading=true;state.roadNetworkStatus='Connecting to OpenStreetMap road servers…';state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
+  const boxes=splitBBoxGrid(cityBBox(),5,5),byId=new Map();let cursor=0,done=0,failures=0;const errors=[];
+  async function worker(workerIndex){
+    while(cursor<boxes.length){
+      const idx=cursor++;
+      try{
+        const els=await overpassRoadChunk(boxes[idx],workerIndex);
+        for(const el of els)if(el.type==='way'&&el.tags?.name&&el.geometry?.length>1)byId.set(el.id,el);
+      }catch(e){
+        failures++;if(errors.length<4)errors.push(e?.message||String(e));
+      }
+      done++;
+      state.roadNetworkStatus=`Loading streets… ${done}/${boxes.length} sections · ${byId.size.toLocaleString()} roads found${failures?` · ${failures} failed`:''}`;
+      state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
+    }
+  }
+  try{
+    await Promise.all([worker(0),worker(1)]);
+    if(!byId.size){
+      const detail=errors.length?` ${errors.join(' | ')}`:'';
+      throw new Error(`No road data could be loaded.${detail}`);
+    }
+    state.roadWays=[...byId.values()];const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));
+    state.roadNetwork=segments;state.roadNetworkCount=byId.size;
+    buildStreetIndexFromNetwork();drawRoadNetworkLayer();
+    state.roadNetworkStatus=`Indexed ${byId.size.toLocaleString()} named road ways into ${segments.length.toLocaleString()} astrological street sectors${failures?` · ${failures} of ${boxes.length} sections unavailable`:''}.`;
+  }catch(e){
+    console.error('Street network build failed',e);
+    state.roadWays=[];state.roadNetwork=[];state.streetIndex=[];state.roadNetworkCount=0;
+    state.roadNetworkStatus=`Street network could not be built: ${e?.message||e}`;
+  }finally{
+    state.roadNetworkLoading=false;state.streetIndexLoading=false;state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();updateCityDashboardPanel();
+  }
 }
 function streetIndexHTML(){
   if(state.roadNetworkLoading)return `<div class="street-index-empty">${esc(state.roadNetworkStatus||'Loading city street network…')}</div>`;
-  if(!state.streetIndex.length)return `<div class="street-index-empty"><b>City street network not loaded.</b><br>Use “Build street network” to classify named OpenStreetMap roads across the fixed city wheel.</div>`;
+  if(!state.streetIndex.length)return `<div class="street-index-empty"><b>City street network not loaded.</b><br>Use “Build streets” to classify named OpenStreetMap roads across the fixed city wheel. If a public road server rejects the request, the exact error will appear here.</div>`;
   return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);const shown=row.streets.slice(0,14),more=Math.max(0,row.streetCount-shown.length);const g=['Ashwini','Magha','Mula','Ashlesha','Jyeshtha','Revati'].includes(row.nakshatra);return `<div class="street-index-row ${g?'gandanta-row':''}"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}${g?' · Gandanta edge':''}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
 }
 function extractRoadNames(data){
