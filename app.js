@@ -31,6 +31,9 @@ function zoneOffsetMs(date,timeZone){const parts=new Intl.DateTimeFormat('en-US'
 function zonedInputToDate(value,timeZone){const m=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value||'');if(!m)throw new Error('Invalid local date/time');const wall=Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],0);let guess=wall;for(let i=0;i<3;i++){const offset=zoneOffsetMs(new Date(guess),timeZone);guess=wall-offset}return new Date(guess)}
 function setTimeZoneFromCoords(preserveInstant=true){const instant=preserveInstant?zonedInputToDate(state.localDateTime,state.timeZone):new Date();state.timeZone=lookupTimeZone(state.latitude,state.longitude);state.localDateTime=toZonedInput(instant,state.timeZone)}
 function formatLon(lon){const sign=Math.floor(norm(lon)/30),deg=norm(lon)%30;return `${SIGNS[sign]} ${deg.toFixed(2)}°`}
+function degreeParts(lon){const x=norm(lon)%30;const d=Math.floor(x),m=Math.floor((x-d)*60+1e-7);return {d,m}}
+function formatLonDM(lon){const sign=Math.floor(norm(lon)/30),{d,m}=degreeParts(lon);return `${SIGNS[sign]} ${d}°${String(m).padStart(2,'0')}′`}
+function compactDegree(lon){const {d,m}=degreeParts(lon);return `${d}°${String(m).padStart(2,'0')}′`}
 function nakInfo(lon){const x=norm(lon),size=360/27,index=Math.min(26,Math.floor(x/size)),within=x-index*size,pada=Math.min(4,Math.floor(within/(size/4))+1);return {name:NAKSHATRAS[index],lord:NAK_LORDS[index],pada,index}}
 function point(cx,cy,r,deg){const a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]}
 function scaleConfig(){return SCALE_CONFIG[state.scale]||SCALE_CONFIG.City}
@@ -855,14 +858,32 @@ function wheel(){
   s+=`<circle cx="350" cy="350" r="162" fill="#080a10" fill-opacity=".15" stroke="#8d98bd" stroke-opacity=".24"/><circle cx="350" cy="350" r="78" fill="#111827" fill-opacity=".13" stroke="#aab5d9" stroke-opacity=".22"/><circle cx="350" cy="350" r="5" fill="#ffd166" filter="url(#softGlow)"/>`;
   for(const asp of aspectPairs()){const a1=asp.a.longitude+rot,a2=asp.b.longitude+rot,[x1,y1]=point(cx,cy,128,a1),[x2,y2]=point(cx,cy,128,a2);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="aspect-line aspect-${asp.type}"/>`}
   ['N','NE','E','SE','S','SW','W','NW'].forEach((d,i)=>{const[x,y]=point(cx,cy,346,i*45);s+=`<text x="${x}" y="${y+6}" text-anchor="middle" class="${d==='E'?'dir east':'dir'}">${d}</text>`});
-  s+=`<text x="637" y="338" text-anchor="middle" class="asc-label">${isMoonChart()?'☽ H1':'ASC'}</text><text x="63" y="338" text-anchor="middle" class="dsc-label">${isMoonChart()?'H7':'DSC'}</text>`;
-  activePlanets().forEach((p)=>{const angle=p.longitude+rot,[x,y]=point(cx,cy,128,angle),nak=nakInfo(p.longitude),color=nakColor(nak.index,.98);s+=`<g class="planet-node" data-title="${esc(p.name)} ${esc(formatLon(p.longitude))} · ${esc(nak.name)}"><circle cx="${x}" cy="${y}" r="15" fill="#101521" fill-opacity=".76" stroke="${color}" stroke-width="2"/><text x="${x}" y="${y+7}" text-anchor="middle" class="planet-glyph" style="fill:${color}">${p.glyph}</text></g>`});
+  const ascLon=activeAsc(),dscLon=norm(ascLon+180);
+  if(isMoonChart()){
+    s+=`<text x="637" y="334" text-anchor="middle" class="asc-label moon-axis-label">☽ H1</text><text x="637" y="349" text-anchor="middle" class="axis-degree">${compactDegree(chartAnchorLongitude())}</text><text x="63" y="334" text-anchor="middle" class="dsc-label moon-axis-label">H7</text><text x="63" y="349" text-anchor="middle" class="axis-degree">${compactDegree(norm(chartAnchorLongitude()+180))}</text>`;
+    [[ascLon,'ASC','asc-marker'],[dscLon,'DSC','dsc-marker']].forEach(([lon,label,cls])=>{const [ax,ay]=point(cx,cy,306,lon+rot);s+=`<g class="angle-marker ${cls}"><circle cx="${ax}" cy="${ay}" r="18"/><text x="${ax}" y="${ay-1}" text-anchor="middle" class="angle-label">${label}</text><text x="${ax}" y="${ay+11}" text-anchor="middle" class="angle-degree">${compactDegree(lon)}</text></g>`});
+  }else{
+    s+=`<text x="637" y="332" text-anchor="middle" class="asc-label">ASC</text><text x="637" y="348" text-anchor="middle" class="axis-degree asc-degree">${compactDegree(ascLon)}</text><text x="63" y="332" text-anchor="middle" class="dsc-label">DSC</text><text x="63" y="348" text-anchor="middle" class="axis-degree dsc-degree">${compactDegree(dscLon)}</text>`;
+  }
+  activePlanets().forEach((p)=>{const angle=p.longitude+rot,[x,y]=point(cx,cy,128,angle),nak=nakInfo(p.longitude),color=nakColor(nak.index,.98);s+=`<g class="planet-node" data-title="${esc(p.name)} ${esc(formatLonDM(p.longitude))} · ${esc(nak.name)}"><circle cx="${x}" cy="${y}" r="19" fill="#101521" fill-opacity=".82" stroke="${color}" stroke-width="2"/><text x="${x}" y="${y+1}" text-anchor="middle" class="planet-glyph" style="fill:${color}">${p.glyph}</text><text x="${x}" y="${y+13}" text-anchor="middle" class="planet-degree" style="fill:${color}">${compactDegree(p.longitude)}</text></g>`});
   return s+'</svg>';
 }
 
 function transitTable(){
   if(!state.transit)return `<div class="empty-state">Calculate a live transit to replace the demonstration planet placements.</div>`;
-  return `<div class="transit-table">${state.transit.planets.map(p=>`<div class="transit-row"><b>${p.glyph} ${p.name}${p.retrograde?' ℞':''}</b><span>${formatLon(p.longitude)}</span><span>${p.name==='Rahu'||p.name==='Ketu'?p.name:p.name} · ${p.name?`${p.name}`:''}</span><span>${p.name==='Rahu'||p.name==='Ketu'?`${p.name==='Rahu'?'Mean node':'Opposite mean node'}`:`${p.speed.toFixed(3)}°/day`}</span><small>${p.name==='Rahu'||p.name==='Ketu'?`${nakInfo(p.longitude).name} · Pada ${nakInfo(p.longitude).pada}`:`${p.name?`${nakInfo(p.longitude).name} · Pada ${nakInfo(p.longitude).pada}`:''}`}</small></div>`).join('')}</div>`;
+  const angles=[{name:'ASC',glyph:'ASC',longitude:activeAsc(),note:'Eastern horizon'},{name:'DSC',glyph:'DSC',longitude:norm(activeAsc()+180),note:'Western horizon'}];
+  const angleRows=angles.map(a=>`<div class="transit-row angle-row"><b>${a.glyph}</b><span>${formatLonDM(a.longitude)}</span><span>${compactDegree(a.longitude)}</span><span>—</span><small>${a.note}</small></div>`).join('');
+  const planetRows=state.transit.planets.map(p=>`<div class="transit-row"><b>${p.glyph} ${p.name}${p.retrograde?' ℞':''}</b><span>${formatLonDM(p.longitude)}</span><span>${compactDegree(p.longitude)}</span><span>${p.name==='Rahu'||p.name==='Ketu'?`${p.name==='Rahu'?'Mean node':'Opposite mean node'}`:`${p.speed.toFixed(3)}°/day`}</span><small>${nakInfo(p.longitude).name} · Pada ${nakInfo(p.longitude).pada}</small></div>`).join('');
+  return `<div class="transit-table">${angleRows}${planetRows}</div>`;
+}
+function compactPlacements(){
+  if(!state.transit)return '';
+  const rows=[
+    {name:'ASC',glyph:'ASC',longitude:activeAsc()},
+    {name:'DSC',glyph:'DSC',longitude:norm(activeAsc()+180)},
+    ...state.transit.planets
+  ];
+  return `<details class="placement-disclosure"><summary>Exact placements</summary><div class="placement-list">${rows.map(p=>`<div class="placement-item"><b>${p.glyph||''} ${p.name}${p.retrograde?' ℞':''}</b><span>${formatLonDM(p.longitude)}</span></div>`).join('')}</div></details>`;
 }
 
 function profileView(){const p=state.profile,pr=p.planetRoles[state.selectedPlanet]||[],hr=p.houseRoles[state.selectedHouse]||[];return `<div class="grid two"><section class="panel"><span class="eyebrow">PROFILE MODE</span><h2>Build your astrology profile</h2><div class="segmented">${[['automatic','Calculate My Chart'],['manual','Build Manually'],['quick','Quick Reading']].map(([m,l])=>`<button data-mode="${m}" class="${p.mode===m?'active':''}">${l}</button>`).join('')}</div><h3>Manual Ascendant</h3><div class="form-grid"><label>Sign<select id="ascSign">${SIGNS.map(x=>`<option ${x===p.ascSign?'selected':''}>${x}</option>`).join('')}</select></label><label>Degree<input id="ascDegree" type="number" min="0" max="29" value="${p.ascDegree}"></label><label>Minute<input id="ascMinute" type="number" min="0" max="59" value="${p.ascMinute}"></label><label>Second<input id="ascSecond" type="number" min="0" max="59" value="${p.ascSecond}"></label></div><div class="status-line">Manual ASC: <b>${p.ascSign} ${p.ascDegree}° ${p.ascMinute}′ ${p.ascSecond}″</b></div></section><section class="panel"><span class="eyebrow">PERSONAL MEANINGS</span><h2>Planet & house roles</h2><div class="planet-picker">${PLANETS.map(([n,g])=>`<button data-planet="${n}" class="${state.selectedPlanet===n?'selected':''}"><span>${g}</span>${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">${state.selectedPlanet} roles</div><div class="tags">${pr.map((x,i)=>`<button class="tag" data-remove-planet="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="planetRoleInput" placeholder="e.g. ASC Lord, 5th Lord"><button id="addPlanetRole">+ Add</button></div></div><div class="house-picker top-gap">${Array.from({length:12},(_,i)=>i+1).map(n=>`<button data-house="${n}" class="${state.selectedHouse===n?'selected':''}">H${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">House ${state.selectedHouse} meanings</div><div class="tags">${hr.map((x,i)=>`<button class="tag" data-remove-house="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="houseRoleInput" placeholder="e.g. home business, children"><button id="addHouseRole">+ Add</button></div></div></section></div>`}
@@ -996,6 +1017,7 @@ function climateView(){
         ${isMoonChart()?'':`<label>Ascendant source<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label>`}
         <div class="module-fact"><span>${isMoonChart()?'Moon anchor':'ASC'}</span><b>${isMoonChart()?`${formatLon(moonRecord()?.longitude??chartAnchorLongitude())} · ${nakInfo(moonRecord()?.longitude??chartAnchorLongitude()).name}`:formatLon(activeAsc())}</b></div><div class="module-fact"><span>Forecast cycle valid until</span><b>${esc(formatBoundary(chartBoundaryDate()))}</b></div>
         <div class="module-fact"><span>Local time</span><b>${esc(state.localDateTime.replace('T',' '))}</b></div>
+        ${compactPlacements()}
         <div class="module-actions"><button id="useNow" class="action secondary compact">Now</button><button id="calculate" class="action primary compact" ${state.engineStatus==='loading'?'disabled':''}>Refresh transit</button></div>
       </div>
       <div class="panel compact-module">

@@ -1,4 +1,4 @@
-# Vedic Climate Scope v3.3 — Dual Ascendant + Moon Climate Charts
+# Vedic Climate Scope v3.4 — Exact Degree Placements
 
 Static HTML/CSS/JavaScript. No Vite.
 
@@ -30,3 +30,9 @@ The same cached OpenStreetMap road geometry is reused on both pages. Switching b
 
 ## Deployment
 Replace the existing repository files with this version and commit. Vercel should redeploy automatically.
+
+## v3.4 degree display
+- ASC and DSC now display sidereal sign-relative degree and minute values.
+- Every planet, Rahu, and Ketu shows its sidereal degree/minute directly on the wheel.
+- A compact **Exact placements** disclosure is available in the Astrology/Moon Chart panel on both climate pages.
+- The Moon page retains Moon H1/H7 while also showing the actual ASC/DSC positions and degrees around the wheel.
