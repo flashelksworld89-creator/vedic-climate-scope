@@ -9,7 +9,7 @@ const now=new Date();
 const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
-let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,mapKeyTest:''};
+let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,mapKeyTest:'',horoscopeArea:'Overview'};
 const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
 function cloneDefaultProfile(){return JSON.parse(JSON.stringify(DEFAULT_PROFILE))}
@@ -238,7 +238,70 @@ function transitTable(){
 
 function profileView(){const p=state.profile,pr=p.planetRoles[state.selectedPlanet]||[],hr=p.houseRoles[state.selectedHouse]||[];return `<div class="grid two"><section class="panel"><span class="eyebrow">PROFILE MODE</span><h2>Build your astrology profile</h2><div class="segmented">${[['automatic','Calculate My Chart'],['manual','Build Manually'],['quick','Quick Reading']].map(([m,l])=>`<button data-mode="${m}" class="${p.mode===m?'active':''}">${l}</button>`).join('')}</div><h3>Manual Ascendant</h3><div class="form-grid"><label>Sign<select id="ascSign">${SIGNS.map(x=>`<option ${x===p.ascSign?'selected':''}>${x}</option>`).join('')}</select></label><label>Degree<input id="ascDegree" type="number" min="0" max="29" value="${p.ascDegree}"></label><label>Minute<input id="ascMinute" type="number" min="0" max="59" value="${p.ascMinute}"></label><label>Second<input id="ascSecond" type="number" min="0" max="59" value="${p.ascSecond}"></label></div><div class="status-line">Manual ASC: <b>${p.ascSign} ${p.ascDegree}° ${p.ascMinute}′ ${p.ascSecond}″</b></div></section><section class="panel"><span class="eyebrow">PERSONAL MEANINGS</span><h2>Planet & house roles</h2><div class="planet-picker">${PLANETS.map(([n,g])=>`<button data-planet="${n}" class="${state.selectedPlanet===n?'selected':''}"><span>${g}</span>${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">${state.selectedPlanet} roles</div><div class="tags">${pr.map((x,i)=>`<button class="tag" data-remove-planet="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="planetRoleInput" placeholder="e.g. ASC Lord, 5th Lord"><button id="addPlanetRole">+ Add</button></div></div><div class="house-picker top-gap">${Array.from({length:12},(_,i)=>i+1).map(n=>`<button data-house="${n}" class="${state.selectedHouse===n?'selected':''}">H${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">House ${state.selectedHouse} meanings</div><div class="tags">${hr.map((x,i)=>`<button class="tag" data-remove-house="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="houseRoleInput" placeholder="e.g. home business, children"><button id="addHouseRole">+ Add</button></div></div></section></div>`}
 
-function climateView(){const p=state.profile,t=state.transit;return `<div class="climate-layout"><section class="panel controls"><span class="eyebrow">PERSONAL CLIMATE SCOPE</span><h2>Fixed city climate wheel</h2><div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div>${state.maptilerKey?'':`<div class="notice">Map search is not configured. Add your MapTiler key under <b>Settings</b>.</div>`}<div class="search-row"><input id="placeSearch" placeholder="Choose a city, neighborhood, street or address"><button id="searchPlace" class="action primary compact">Search</button></div>${state.searchStatus?`<div class="search-status">${esc(state.searchStatus)}</div>`:''}${state.searchResults.length?`<div class="search-results">${state.searchResults.map((r,i)=>`<button data-search-result="${i}"><b>${esc(r.name)}</b><small>${['place','municipality','city','town'].includes(String(r.type).toLowerCase())?'sets city epicenter':'moves blue location dot'} · ${esc(r.type||'place')}</small></button>`).join('')}</div>`:''}<label>Blue-dot latitude<input id="latitude" type="number" step="0.000001" min="-90" max="90" value="${state.latitude}"></label><label>Blue-dot longitude<input id="longitude" type="number" step="0.000001" min="-180" max="180" value="${state.longitude}"></label><button id="useLocation" class="action secondary">Use device location for blue dot</button><button id="centerMap" class="action secondary">Move blue dot to coordinates</button><label>Location local date & time<input id="localDateTime" type="datetime-local" value="${state.localDateTime}"></label><div class="help-note">Time zone: ${esc(state.timeZone)} · UTC used internally: ${state.transit?esc(state.transit.utc.replace('T',' ').slice(0,16)+' UTC'):'calculated on transit'}</div><button id="useNow" class="action secondary">Use current local time</button><button id="calculate" class="action primary" ${state.engineStatus==='loading'?'disabled':''}>Calculate Live Transit</button><label>Wheel Ascendant<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label><label>View mode<select id="scale">${['City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label><div class="metric"><span>City epicenter</span><b>${esc(state.cityName)} · ${(+state.cityLatitude).toFixed(5)}, ${(+state.cityLongitude).toFixed(5)}</b></div><div class="metric"><span>Fixed city-wheel radius</span><b>${cityRadiusLabel()}</b></div><div class="metric"><span>Active Ascendant</span><b>${formatLon(activeAsc())}</b></div>${t?`<div class="metric"><span>Lahiri ayanamsa</span><b>${t.ayanamsa.toFixed(4)}°</b></div><div class="metric"><span>Node</span><b>Mean Rahu/Ketu</b></div>`:''}<div class="metric"><span>Blue location dot</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b></div><div class="metric"><span>Compass rule</span><b>ASC East · DSC West</b></div><div class="notice">The wheel is geographically anchored to the city center and keeps the same physical span. City / Neighborhood / Street now change only the map zoom. The blue dot moves independently through the fixed wheel.</div></section><section class="panel wheel-panel"><div class="map-toolbar"><button id="fullscreenMap" class="action secondary compact">⛶ Fullscreen map</button></div><div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Transit governors · Streets</b></div><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div><div class="wheel-status">Fixed city wheel · ${esc(state.cityName)} · radius ${cityRadiusLabel()} · ${state.scale} view</div></section></div><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">BLUE DOT ANALYSIS</span><h2>Current geographic climate sector</h2></div></div><div id="locationAnalysis">${locationAnalysisCard()}</div></section><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">CALCULATED POSITIONS</span><h2>Transit details</h2></div></div>${transitTable()}</section>`}
+
+function selectedPointSummary(){
+  const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
+  if(!a)return `<div class="compact-empty">Move the blue dot to inspect this location.</div>`;
+  const gov=a.governors?.length?a.governors.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`No current transit governor`;
+  return `<div class="selected-summary">
+    <div><span>Climate house</span><b>H${a.climateHouse}</b></div>
+    <div><span>Zodiac</span><b>${esc(a.sign)} ${a.signDegree.toFixed(2)}°</b></div>
+    <div><span>Nakshatra</span><b>${esc(a.nak.name)} · P${a.nak.pada}</b></div>
+    <div><span>Traditional lord</span><b>${esc(a.nak.lord)}</b></div>
+    <div class="wide"><span>Transit governor</span><b>${gov}</b></div>
+  </div>`;
+}
+function locationHoroscopePanel(){
+  const areas=['Overview','Home','Work','Relationships','Money','Travel','Neighborhood','Personal Climate'];
+  const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
+  const gov=a?.governors?.length?a.governors.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):'No planet currently occupying this nakshatra';
+  return `<section class="panel location-horoscope">
+    <div class="horoscope-head"><div><span class="eyebrow">LOCATION HOROSCOPE</span><h2>${esc(state.horoscopeArea)} forecast</h2></div><div class="horoscope-place">${esc(state.cityName)} · H${a?.climateHouse||'—'} · ${a?esc(a.nak.name):'—'}</div></div>
+    <div class="horoscope-tabs">${areas.map(x=>`<button data-horoscope-area="${x}" class="${state.horoscopeArea===x?'active':''}">${x}</button>`).join('')}</div>
+    <div id="locationHoroscopeBody" class="horoscope-body">
+      <div class="horoscope-context"><span>Selected location</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b><span>Current transit governor</span><b>${gov}</b></div>
+      <p>This space is reserved for the generated <b>${esc(state.horoscopeArea)}</b> horoscope for the blue-dot location. The forecast engine will use this location's climate house, zodiac, nakshatra, pada, traditional lord, transit governors, planetary aspects, your personalized planet/house roles, and Bhavat Bhavam.</p>
+    </div>
+  </section>`;
+}
+function climateView(){
+  return `<div class="climate-workspace">
+    <section class="left-stack">
+      <div class="panel compact-module">
+        <span class="eyebrow">LOCATION</span>
+        <div class="search-row"><input id="placeSearch" placeholder="City, neighborhood, street or address"><button id="searchPlace" class="action primary compact">Search</button></div>
+        ${state.searchStatus?`<div class="search-status">${esc(state.searchStatus)}</div>`:''}
+        ${state.searchResults.length?`<div class="search-results">${state.searchResults.map((r,i)=>`<button data-search-result="${i}"><b>${esc(r.name)}</b><small>${['place','municipality','city','town'].includes(String(r.type).toLowerCase())?'sets city epicenter':'moves blue dot'} · ${esc(r.type||'place')}</small></button>`).join('')}</div>`:''}
+        <div class="module-fact"><span>City</span><b>${esc(state.cityName)}</b></div>
+        <div class="module-fact"><span>Blue dot</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b></div>
+        <button id="useLocation" class="action secondary">Use device location</button>
+      </div>
+      <div class="panel compact-module">
+        <span class="eyebrow">VIEW</span>
+        <label>Mode<select id="scale">${['City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label>
+        <button id="fullscreenMap" class="action secondary">⛶ Fullscreen map</button>
+      </div>
+      <div class="panel compact-module">
+        <span class="eyebrow">ASTROLOGY</span>
+        <div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div>
+        <label>Ascendant source<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label>
+        <div class="module-fact"><span>ASC</span><b>${formatLon(activeAsc())}</b></div>
+        <div class="module-fact"><span>Local time</span><b>${esc(state.localDateTime.replace('T',' '))}</b></div>
+        <div class="module-actions"><button id="useNow" class="action secondary compact">Now</button><button id="calculate" class="action primary compact" ${state.engineStatus==='loading'?'disabled':''}>Refresh transit</button></div>
+      </div>
+      <div class="panel compact-module">
+        <span class="eyebrow">SELECTED POINT</span>
+        <div id="selectedPointSummary">${selectedPointSummary()}</div>
+      </div>
+      ${state.maptilerKey?'':`<div class="panel compact-module"><span class="eyebrow">MAP SEARCH</span><div class="notice">Add your MapTiler key under Settings to enable place search and the street index.</div></div>`}
+    </section>
+    <section class="panel wheel-panel primary-map-panel">
+      <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Transit governors · Streets</b></div><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
+      <div class="map-caption"><span>${esc(state.cityName)} fixed wheel</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span></div>
+    </section>
+  </div>
+  ${locationHoroscopePanel()}`;
+}
 
 function horoscopeView(){return `<div class="grid two"><section class="panel hero-panel"><span class="eyebrow">DAILY HOROSCOPE</span><h1>Structured Vedic forecasting</h1><p>The forecast layer will consume calculated transit facts, your custom planet/house roles, nakshatras, house lords, Vedic aspects and Bhavat Bhavam. We are keeping interpretation downstream from the astronomy so the prose cannot invent planet positions.</p></section><section class="panel"><h2>Life areas</h2><div class="life-grid">${['Daily Overview','Self & Direction','Home & Family','Relationships','Career & Work','Money & Earning','Health & Vitality','Travel','Neighbors & Local Activity','Creativity & Children','Spiritual Life','Personal Climate'].map((x,i)=>`<button><span>${String(i+1).padStart(2,'0')}</span>${x}</button>`).join('')}</div></section></div>`}
 
@@ -311,7 +374,7 @@ function initClimateMap(){
   map.on('click',e=>{
     state.latitude=+e.latlng.lat;state.longitude=+e.latlng.lng;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);
     state.mapPointMarker.setLatLng(e.latlng);
-    const target=document.querySelector('#locationAnalysis');if(target)target.innerHTML=locationAnalysisCard();
+    const target=document.querySelector('#selectedPointSummary');if(target)target.innerHTML=selectedPointSummary();
   });
   setTimeout(()=>{map.invalidateSize();updateGeographicWheel()},50);
 }
@@ -348,9 +411,10 @@ function bind(){
   const refreshStreet=document.querySelector('#refreshStreetIndex');if(refreshStreet)refreshStreet.onclick=()=>buildStreetIndex(true);
   document.onfullscreenchange=()=>{if(state.map)setTimeout(()=>state.map.invalidateSize(),80);if(document.fullscreenElement?.id==='mapFullscreenShell')buildStreetIndex(false)};
   document.querySelectorAll('[data-search-result]').forEach(b=>b.onclick=()=>selectSearchResult(+b.dataset.searchResult));
+  document.querySelectorAll('[data-horoscope-area]').forEach(b=>b.onclick=()=>{state.horoscopeArea=b.dataset.horoscopeArea;render()});
   const loc=document.querySelector('#useLocation');if(loc)loc.onclick=()=>{if(!navigator.geolocation){state.engineMessage='Browser geolocation is unavailable.';render();return}loc.disabled=true;loc.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{state.latitude=+pos.coords.latitude.toFixed(6);state.longitude=+pos.coords.longitude.toFixed(6);state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);render()},err=>{state.engineMessage=`Location not available: ${err.message}`;render()},{enableHighAccuracy:true,timeout:10000})};
   const centerMap=document.querySelector('#centerMap');if(centerMap)centerMap.onclick=()=>{const a=document.querySelector('#latitude'),o=document.querySelector('#longitude');state.latitude=+a.value;state.longitude=+o.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
-  const calc=document.querySelector('#calculate');if(calc)calc.onclick=()=>{const a=document.querySelector('#latitude'),o=document.querySelector('#longitude'),d=document.querySelector('#localDateTime');state.latitude=+a.value;state.longitude=+o.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);state.localDateTime=d.value;calculateTransit()};
+  const calc=document.querySelector('#calculate');if(calc)calc.onclick=()=>calculateTransit();
   const ap=document.querySelector('#addPlanetRole');if(ap)ap.onclick=()=>{const e=document.querySelector('#planetRoleInput'),v=e.value.trim();if(v){(state.profile.planetRoles[state.selectedPlanet]??=[]).push(v);save();render()}};
   document.querySelectorAll('[data-remove-planet]').forEach(b=>b.onclick=()=>{state.profile.planetRoles[state.selectedPlanet].splice(+b.dataset.removePlanet,1);save();render()});
   const ah=document.querySelector('#addHouseRole');if(ah)ah.onclick=()=>{const e=document.querySelector('#houseRoleInput'),v=e.value.trim();if(v){(state.profile.houseRoles[state.selectedHouse]??=[]).push(v);save();render()}};

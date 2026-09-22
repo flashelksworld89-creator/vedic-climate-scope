@@ -199,3 +199,36 @@
 .location-readout{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media(max-width:1100px){.location-readout{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.location-readout{grid-template-columns:1fr}}
+
+/* V2.2 organized first-page workspace */
+.climate-workspace{display:grid;grid-template-columns:330px minmax(0,1fr);gap:18px;align-items:start}
+.left-stack{display:grid;gap:12px;align-content:start}
+.compact-module{padding:16px}
+.compact-module .eyebrow{display:block;margin-bottom:9px}
+.compact-module .engine{margin:7px 0 12px}
+.compact-module label{margin-top:9px}
+.module-fact{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #252b3d;font-size:11px}
+.module-fact span{color:#7f8aa7}.module-fact b{color:#eef2ff;text-align:right;font-size:12px}
+.module-actions{display:grid;grid-template-columns:1fr 1.35fr;gap:8px;margin-top:10px}
+.selected-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.selected-summary>div{display:grid;gap:4px;padding:9px 10px;border:1px solid #2c3348;background:#0b0f18;border-radius:9px;min-width:0}
+.selected-summary>div.wide{grid-column:1/-1}
+.selected-summary span{font-size:9px;color:#79839e;text-transform:uppercase;letter-spacing:.07em}
+.selected-summary b{font-size:11px;line-height:1.35;color:#eef2ff;overflow-wrap:anywhere}
+.primary-map-panel{min-width:0;padding:14px}
+.primary-map-panel .map-wheel-stage{width:100%;max-width:none;aspect-ratio:1.25/1;min-height:620px}
+.map-caption{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 16px;padding:10px 4px 0;color:#7f8aa7;font-size:10px}
+.location-horoscope{margin-top:18px;min-height:300px}
+.horoscope-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:14px}
+.horoscope-head h2{margin:4px 0 0}.horoscope-place{font-size:11px;color:#97a1bb;text-align:right}
+.horoscope-tabs{display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid #293047;padding-bottom:12px;margin-bottom:16px}
+.horoscope-tabs button{border:1px solid #30374f;background:#0c1019;color:#9ca7c2;border-radius:999px;padding:8px 11px;cursor:pointer;font-size:11px}
+.horoscope-tabs button.active{background:#232a3e;color:#fff;border-color:#697492}
+.horoscope-body{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:20px;align-items:start}
+.horoscope-context{display:grid;gap:6px;padding:14px;border:1px solid #2c3348;background:#0b0f18;border-radius:12px}
+.horoscope-context span{font-size:9px;color:#79839e;text-transform:uppercase;letter-spacing:.08em}.horoscope-context b{font-size:12px;line-height:1.4}
+.horoscope-body p{margin:0;color:#c2c9db;line-height:1.7;font-size:14px}
+.climate-workspace + .location-horoscope{width:100%}
+@media(max-width:1100px){.climate-workspace{grid-template-columns:290px minmax(0,1fr)}.primary-map-panel .map-wheel-stage{min-height:540px}}
+@media(max-width:900px){.climate-workspace{grid-template-columns:1fr}.left-stack{grid-template-columns:1fr 1fr}.primary-map-panel .map-wheel-stage{min-height:520px}.horoscope-body{grid-template-columns:1fr}}
+@media(max-width:620px){.left-stack{grid-template-columns:1fr}.primary-map-panel .map-wheel-stage{min-height:420px;aspect-ratio:1/1}.selected-summary{grid-template-columns:1fr}.selected-summary>div.wide{grid-column:auto}.horoscope-head{display:grid}.horoscope-place{text-align:left}.module-actions{grid-template-columns:1fr}}
