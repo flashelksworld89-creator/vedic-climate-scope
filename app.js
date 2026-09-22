@@ -12,7 +12,7 @@ const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
 let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapZoom:11,maptilerKey:localStorage.getItem('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null};
-const SCALE_ZOOM={World:2,Country:5,State:7,City:11,Neighborhood:15,Street:18};
+const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
 function loadProfile(){try{return JSON.parse(localStorage.getItem('vedicProfile'))||structuredClone(DEFAULT_PROFILE)}catch{return structuredClone(DEFAULT_PROFILE)}}
 function save(){localStorage.setItem('vedicProfile',JSON.stringify(state.profile))}
@@ -26,6 +26,22 @@ function setTimeZoneFromCoords(preserveInstant=true){const instant=preserveInsta
 function formatLon(lon){const sign=Math.floor(norm(lon)/30),deg=norm(lon)%30;return `${SIGNS[sign]} ${deg.toFixed(2)}°`}
 function nakInfo(lon){const x=norm(lon),size=360/27,index=Math.min(26,Math.floor(x/size)),within=x-index*size,pada=Math.min(4,Math.floor(within/(size/4))+1);return {name:NAKSHATRAS[index],lord:NAK_LORDS[index],pada,index}}
 function point(cx,cy,r,deg){const a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]}
+function scaleConfig(){return SCALE_CONFIG[state.scale]||SCALE_CONFIG.City}
+function scaleRadiusKm(){return scaleConfig().radiusKm}
+function scaleRadiusLabel(){const km=scaleRadiusKm();return km>=1?`${km.toFixed(km>=100?0:1)} km`:`${(km*1000).toFixed(0)} m`}
+function nakHue(index){return (index*360/27+18)%360}
+function nakColor(index,alpha=1){return `hsl(${nakHue(index)} 56% 52% / ${alpha})`}
+function radialLabel(name,cx,cy,outerR,angle){
+  const chars=[...name];
+  let y=0;
+  const [x0,y0]=point(cx,cy,outerR,angle);
+  let s=`<g transform="rotate(${angle} ${x0} ${y0})" class="nak-radial">`;
+  chars.forEach(ch=>{
+    y += ch===' ' ? 4.4 : 6.2;
+    if(ch!==' '){s += `<text x="${x0}" y="${y0+y}" text-anchor="middle" class="nak-char">${esc(ch)}</text>`}
+  });
+  return s+'</g>'
+}
 function arcPath(cx,cy,r1,r2,start,end){const p1=point(cx,cy,r2,start),p2=point(cx,cy,r2,end),p3=point(cx,cy,r1,end),p4=point(cx,cy,r1,start);return `M ${p1[0]} ${p1[1]} A ${r2} ${r2} 0 0 1 ${p2[0]} ${p2[1]} L ${p3[0]} ${p3[1]} A ${r1} ${r1} 0 0 0 ${p4[0]} ${p4[1]} Z`}
 function manualAsc(){const p=state.profile;return SIGNS.indexOf(p.ascSign)*30+(+p.ascDegree||0)+(+p.ascMinute||0)/60+(+p.ascSecond||0)/3600}
 function activeAsc(){return state.useLiveAsc&&state.transit?state.transit.ascendant:manualAsc()}
@@ -38,17 +54,25 @@ function bearingBetween(lat1,lon1,lat2,lon2){
   return norm(Math.atan2(y,x)/r);
 }
 function projectedLongitudeForBearing(bearing){return norm(activeAsc()+bearing-90)}
+function distanceKm(lat1,lon1,lat2,lon2){
+  const R=6371, toRad=Math.PI/180;
+  const dLat=(lat2-lat1)*toRad,dLon=(lon2-lon1)*toRad;
+  const a=Math.sin(dLat/2)**2 + Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
 function analyzeMapPoint(lat,lon){
   const bearing=bearingBetween(+state.latitude,+state.longitude,+lat,+lon);
   const zodiacLon=projectedLongitudeForBearing(bearing);
   const nak=nakInfo(zodiacLon), signIndex=Math.floor(zodiacLon/30), signDegree=zodiacLon%30;
   const nearest=activePlanets().map(p=>({...p,separation:angularDiff(p.longitude,zodiacLon)})).sort((a,b)=>a.separation-b.separation)[0];
-  return {lat:+lat,lon:+lon,bearing,zodiacLon,nak,sign:SIGNS[signIndex],signDegree,nearest};
+  const distance=distanceKm(+state.latitude,+state.longitude,+lat,+lon);
+  const radiusKm=scaleRadiusKm();
+  return {lat:+lat,lon:+lon,bearing,zodiacLon,nak,sign:SIGNS[signIndex],signDegree,nearest,distanceKm:distance,radiusKm,insideRadius:distance<=radiusKm};
 }
 function locationAnalysisCard(){
   const a=state.selectedMapPoint;if(!a)return `<div class="empty-state">Click a point inside the wheel to inspect its projected zodiac, nakshatra and nearest planetary influence.</div>`;
   const near=a.nearest&&a.nearest.separation<=6;
-  return `<div class="location-readout"><div><span>Map point</span><b>${a.lat.toFixed(5)}, ${a.lon.toFixed(5)}</b></div><div><span>Bearing from epicenter</span><b>${a.bearing.toFixed(2)}°</b></div><div><span>Projected zodiac</span><b>${a.sign} ${a.signDegree.toFixed(2)}°</b></div><div><span>Nakshatra</span><b>${a.nak.name} · Pada ${a.nak.pada}</b></div><div><span>Nakshatra lord</span><b>${a.nak.lord}</b></div><div><span>Planetary vicinity</span><b>${near?`${a.nearest.glyph} ${a.nearest.name} · ${a.nearest.separation.toFixed(2)}° away`:`No planet within 6° · nearest ${a.nearest?.name||'—'} ${a.nearest?`${a.nearest.separation.toFixed(2)}°`:''}`}</b></div></div>`;
+  return `<div class="location-readout"><div><span>Map point</span><b>${a.lat.toFixed(5)}, ${a.lon.toFixed(5)}</b></div><div><span>Bearing from epicenter</span><b>${a.bearing.toFixed(2)}°</b></div><div><span>Distance from epicenter</span><b>${a.distanceKm>=1?`${a.distanceKm.toFixed(2)} km`:`${(a.distanceKm*1000).toFixed(0)} m`}</b></div><div><span>Wheel boundary</span><b>${a.insideRadius?'Inside active wheel':'Outside active wheel'} · radius ${scaleRadiusLabel()}</b></div><div><span>Projected zodiac</span><b>${a.sign} ${a.signDegree.toFixed(2)}°</b></div><div><span>Nakshatra</span><b>${a.nak.name} · Pada ${a.nak.pada}</b></div><div><span>Nakshatra lord</span><b>${a.nak.lord}</b></div><div><span>Planetary vicinity</span><b>${near?`${a.nearest.glyph} ${a.nearest.name} · ${a.nearest.separation.toFixed(2)}° away`:`No planet within 6° · nearest ${a.nearest?.name||'—'} ${a.nearest?`${a.nearest.separation.toFixed(2)}°`:''}`}</b></div></div>`;
 }
 async function searchPlace(){
   const key=(document.querySelector('#maptilerKey')?.value||state.maptilerKey||'').trim();
@@ -67,7 +91,7 @@ async function searchPlace(){
 function selectSearchResult(i){
   const r=state.searchResults[i];if(!r)return;
   state.longitude=+r.center[0];state.latitude=+r.center[1];state.selectedMapPoint=null;setTimeZoneFromCoords(true);
-  const zoom=r.type==='address'?18:r.type==='neighbourhood'?15:r.type==='place'?11:SCALE_ZOOM[state.scale]||11;
+  const zoom=r.type==='address'?18:r.type==='neighbourhood'?15:r.type==='place'?11:scaleConfig().zoom;
   state.mapZoom=zoom;state.searchStatus=`Epicenter set to ${r.name}`;state.searchResults=[];
   calculateTransit();
 }
@@ -147,7 +171,7 @@ function transitTable(){
 
 function profileView(){const p=state.profile,pr=p.planetRoles[state.selectedPlanet]||[],hr=p.houseRoles[state.selectedHouse]||[];return `<div class="grid two"><section class="panel"><span class="eyebrow">PROFILE MODE</span><h2>Build your astrology profile</h2><div class="segmented">${[['automatic','Calculate My Chart'],['manual','Build Manually'],['quick','Quick Reading']].map(([m,l])=>`<button data-mode="${m}" class="${p.mode===m?'active':''}">${l}</button>`).join('')}</div><h3>Manual Ascendant</h3><div class="form-grid"><label>Sign<select id="ascSign">${SIGNS.map(x=>`<option ${x===p.ascSign?'selected':''}>${x}</option>`).join('')}</select></label><label>Degree<input id="ascDegree" type="number" min="0" max="29" value="${p.ascDegree}"></label><label>Minute<input id="ascMinute" type="number" min="0" max="59" value="${p.ascMinute}"></label><label>Second<input id="ascSecond" type="number" min="0" max="59" value="${p.ascSecond}"></label></div><div class="status-line">Manual ASC: <b>${p.ascSign} ${p.ascDegree}° ${p.ascMinute}′ ${p.ascSecond}″</b></div></section><section class="panel"><span class="eyebrow">PERSONAL MEANINGS</span><h2>Planet & house roles</h2><div class="planet-picker">${PLANETS.map(([n,g])=>`<button data-planet="${n}" class="${state.selectedPlanet===n?'selected':''}"><span>${g}</span>${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">${state.selectedPlanet} roles</div><div class="tags">${pr.map((x,i)=>`<button class="tag" data-remove-planet="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="planetRoleInput" placeholder="e.g. ASC Lord, 5th Lord"><button id="addPlanetRole">+ Add</button></div></div><div class="house-picker top-gap">${Array.from({length:12},(_,i)=>i+1).map(n=>`<button data-house="${n}" class="${state.selectedHouse===n?'selected':''}">H${n}</button>`).join('')}</div><div class="tag-editor"><div class="tag-title">House ${state.selectedHouse} meanings</div><div class="tags">${hr.map((x,i)=>`<button class="tag" data-remove-house="${i}">${esc(x)} ×</button>`).join('')}</div><div class="add-row"><input id="houseRoleInput" placeholder="e.g. home business, children"><button id="addHouseRole">+ Add</button></div></div></section></div>`}
 
-function climateView(){const p=state.profile,t=state.transit;return `<div class="climate-layout"><section class="panel controls"><span class="eyebrow">PERSONAL CLIMATE SCOPE</span><h2>Live sidereal wheel</h2><div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div><label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste key once" value="${esc(state.maptilerKey)}"></label><div class="help-note">Stored only in this browser. Restrict the key to your Vercel domain in MapTiler.</div><div class="search-row"><input id="placeSearch" placeholder="City, neighborhood, street or address"><button id="searchPlace" class="action primary compact">Search</button></div>${state.searchStatus?`<div class="search-status">${esc(state.searchStatus)}</div>`:''}${state.searchResults.length?`<div class="search-results">${state.searchResults.map((r,i)=>`<button data-search-result="${i}"><b>${esc(r.name)}</b><small>${esc(r.type||'place')}</small></button>`).join('')}</div>`:''}<label>Latitude<input id="latitude" type="number" step="0.000001" min="-90" max="90" value="${state.latitude}"></label><label>Longitude<input id="longitude" type="number" step="0.000001" min="-180" max="180" value="${state.longitude}"></label><button id="useLocation" class="action secondary">Use device location</button><button id="centerMap" class="action secondary">Center map on coordinates</button><label>Location local date & time<input id="localDateTime" type="datetime-local" value="${state.localDateTime}"></label><div class="help-note">Time zone: ${esc(state.timeZone)} · UTC used internally: ${state.transit?esc(state.transit.utc.replace('T',' ').slice(0,16)+' UTC'):'calculated on transit'}</div><button id="useNow" class="action secondary">Use current local time</button><button id="calculate" class="action primary" ${state.engineStatus==='loading'?'disabled':''}>Calculate Live Transit</button><label>Wheel Ascendant<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label><label>Projection scale<select id="scale">${['World','Country','State','City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label><div class="metric"><span>Active Ascendant</span><b>${formatLon(activeAsc())}</b></div>${t?`<div class="metric"><span>Lahiri ayanamsa</span><b>${t.ayanamsa.toFixed(4)}°</b></div><div class="metric"><span>Node</span><b>Mean Rahu/Ketu</b></div>`:''}<div class="metric"><span>Epicenter</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b></div><div class="metric"><span>Compass rule</span><b>ASC East · DSC West</b></div><div class="notice">Search sets the epicenter. Click another point on the map to identify which projected zodiac sign, nakshatra and pada falls there. This is an astrological geographic projection, not a claim that a physical street is astronomically located beneath a planet.</div></section><section class="panel wheel-panel"><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><div class="wheel-wrap map-wheel-overlay">${wheel()}</div><div class="epicenter-pin" title="Epicenter"></div></div><div class="wheel-status">${t?'Live sidereal transit positions':'Demonstration planet positions'} · Whole Sign house framework · ${state.scale} scale</div></section></div><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">LOCATION ANALYSIS</span><h2>Selected map sector</h2></div></div><div id="locationAnalysis">${locationAnalysisCard()}</div></section><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">CALCULATED POSITIONS</span><h2>Transit details</h2></div></div>${transitTable()}</section>`}
+function climateView(){const p=state.profile,t=state.transit;return `<div class="climate-layout"><section class="panel controls"><span class="eyebrow">PERSONAL CLIMATE SCOPE</span><h2>Live sidereal wheel</h2><div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div><label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste key once" value="${esc(state.maptilerKey)}"></label><div class="help-note">Stored only in this browser. Restrict the key to your Vercel domain in MapTiler.</div><div class="search-row"><input id="placeSearch" placeholder="City, neighborhood, street or address"><button id="searchPlace" class="action primary compact">Search</button></div>${state.searchStatus?`<div class="search-status">${esc(state.searchStatus)}</div>`:''}${state.searchResults.length?`<div class="search-results">${state.searchResults.map((r,i)=>`<button data-search-result="${i}"><b>${esc(r.name)}</b><small>${esc(r.type||'place')}</small></button>`).join('')}</div>`:''}<label>Latitude<input id="latitude" type="number" step="0.000001" min="-90" max="90" value="${state.latitude}"></label><label>Longitude<input id="longitude" type="number" step="0.000001" min="-180" max="180" value="${state.longitude}"></label><button id="useLocation" class="action secondary">Use device location</button><button id="centerMap" class="action secondary">Center map on coordinates</button><label>Location local date & time<input id="localDateTime" type="datetime-local" value="${state.localDateTime}"></label><div class="help-note">Time zone: ${esc(state.timeZone)} · UTC used internally: ${state.transit?esc(state.transit.utc.replace('T',' ').slice(0,16)+' UTC'):'calculated on transit'}</div><button id="useNow" class="action secondary">Use current local time</button><button id="calculate" class="action primary" ${state.engineStatus==='loading'?'disabled':''}>Calculate Live Transit</button><label>Wheel Ascendant<select id="ascSource"><option value="live" ${state.useLiveAsc?'selected':''}>Live calculated ASC</option><option value="manual" ${!state.useLiveAsc?'selected':''}>Manual profile ASC</option></select></label><label>Projection scale<select id="scale">${['World','Country','State','City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label><div class="metric"><span>Active scale radius</span><b>${scaleRadiusLabel()}</b></div><div class="metric"><span>Active Ascendant</span><b>${formatLon(activeAsc())}</b></div>${t?`<div class="metric"><span>Lahiri ayanamsa</span><b>${t.ayanamsa.toFixed(4)}°</b></div><div class="metric"><span>Node</span><b>Mean Rahu/Ketu</b></div>`:''}<div class="metric"><span>Epicenter</span><b>${(+state.latitude).toFixed(5)}, ${(+state.longitude).toFixed(5)}</b></div><div class="metric"><span>Compass rule</span><b>ASC East · DSC West</b></div><div class="notice">Search sets the epicenter. Click another point on the map to identify which projected zodiac sign, nakshatra and pada falls there. This is an astrological geographic projection, not a claim that a physical street is astronomically located beneath a planet.</div></section><section class="panel wheel-panel"><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><div class="wheel-wrap map-wheel-overlay">${wheel()}</div><div class="epicenter-pin" title="Epicenter"></div></div><div class="wheel-status">${t?'Live sidereal transit positions':'Demonstration planet positions'} · Whole Sign house framework · ${state.scale} scale · radius ${scaleRadiusLabel()}</div></section></div><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">LOCATION ANALYSIS</span><h2>Selected map sector</h2></div></div><div id="locationAnalysis">${locationAnalysisCard()}</div></section><section class="panel transit-panel"><div class="panel-head"><div><span class="eyebrow">CALCULATED POSITIONS</span><h2>Transit details</h2></div></div>${transitTable()}</section>`}
 
 function horoscopeView(){return `<div class="grid two"><section class="panel hero-panel"><span class="eyebrow">DAILY HOROSCOPE</span><h1>Structured Vedic forecasting</h1><p>The forecast layer will consume calculated transit facts, your custom planet/house roles, nakshatras, house lords, Vedic aspects and Bhavat Bhavam. We are keeping interpretation downstream from the astronomy so the prose cannot invent planet positions.</p></section><section class="panel"><h2>Life areas</h2><div class="life-grid">${['Daily Overview','Self & Direction','Home & Family','Relationships','Career & Work','Money & Earning','Health & Vitality','Travel','Neighbors & Local Activity','Creativity & Children','Spiritual Life','Personal Climate'].map((x,i)=>`<button><span>${String(i+1).padStart(2,'0')}</span>${x}</button>`).join('')}</div></section></div>`}
 
@@ -158,7 +182,7 @@ function initClimateMap(){
   const el=document.querySelector('#climateMap');
   if(!el)return;
   if(state.map){try{state.map.remove()}catch{} state.map=null;state.mapMarker=null}
-  const zoom=SCALE_ZOOM[state.scale]??11;
+  const {zoom,radiusKm}=scaleConfig();
   state.mapZoom=zoom;
   const map=L.map(el,{zoomControl:true,attributionControl:true,worldCopyJump:true}).setView([state.latitude,state.longitude],zoom);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
@@ -166,7 +190,8 @@ function initClimateMap(){
     attribution:'&copy; OpenStreetMap contributors'
   }).addTo(map);
   const marker=L.circleMarker([state.latitude,state.longitude],{radius:5,weight:2,fillOpacity:.9}).addTo(map);
-  state.map=map;state.mapMarker=marker;
+  const radiusCircle=L.circle([state.latitude,state.longitude],{radius:radiusKm*1000,color:'#8ec5ff',weight:1.2,opacity:.55,fillColor:'#7ab6ff',fillOpacity:.06,dashArray:'6 6'}).addTo(map);
+  state.map=map;state.mapMarker=marker;state.mapRadiusCircle=radiusCircle;
   map.on('click',e=>{
     state.selectedMapPoint=analyzeMapPoint(e.latlng.lat,e.latlng.lng);
     if(state.mapPointMarker){try{state.mapPointMarker.remove()}catch{}}
@@ -179,8 +204,10 @@ function initClimateMap(){
 
 function moveMapToState(){
   if(!state.map)return;
-  state.map.setView([state.latitude,state.longitude],SCALE_ZOOM[state.scale]??state.map.getZoom());
+  const {zoom,radiusKm}=scaleConfig();
+  state.map.setView([state.latitude,state.longitude],zoom??state.map.getZoom());
   if(state.mapMarker)state.mapMarker.setLatLng([state.latitude,state.longitude]);
+  if(state.mapRadiusCircle){state.mapRadiusCircle.setLatLng([state.latitude,state.longitude]);state.mapRadiusCircle.setRadius(radiusKm*1000)}
 }
 
 function render(){document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Climate Scope'],['horoscope','✦','Daily Horoscope'],['profile','◎','Profile'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav><button id="reset" class="reset">Reset saved profile</button></aside><main><header><div><span class="eyebrow">SIDEREAL ASTROLOGY PLATFORM</span><h1>${state.tab==='climate'?'Personal Climate Scope':state.tab==='profile'?'Personal Astrology Profile':state.tab==='horoscope'?'Daily Vedic Horoscope':'Calculation Settings'}</h1></div><div class="pill">Lahiri · 27 Nakshatras · Bhavat Bhavam</div></header>${state.tab==='profile'?profileView():state.tab==='climate'?climateView():state.tab==='horoscope'?horoscopeView():settingsView()}</main></div>`;bind();initClimateMap()}
@@ -192,7 +219,7 @@ function bind(){
   document.querySelectorAll('[data-planet]').forEach(b=>b.onclick=()=>{state.selectedPlanet=b.dataset.planet;render()});
   document.querySelectorAll('[data-house]').forEach(b=>b.onclick=()=>{state.selectedHouse=+b.dataset.house;render()});
   ['ascSign','ascDegree','ascMinute','ascSecond'].forEach(id=>{const e=document.querySelector('#'+id);if(e)e.onchange=()=>{state.profile[id]=e.value;save();render()}});
-  const scale=document.querySelector('#scale');if(scale)scale.onchange=()=>{state.scale=scale.value;render()};
+  const scale=document.querySelector('#scale');if(scale)scale.onchange=()=>{state.scale=scale.value;moveMapToState();render()};
   const ascSource=document.querySelector('#ascSource');if(ascSource)ascSource.onchange=()=>{state.useLiveAsc=ascSource.value==='live';render()};
   const lat=document.querySelector('#latitude');if(lat)lat.onchange=()=>{state.latitude=+lat.value;setTimeZoneFromCoords(true);moveMapToState();render()};
   const lon=document.querySelector('#longitude');if(lon)lon.onchange=()=>{state.longitude=+lon.value;setTimeZoneFromCoords(true);moveMapToState();render()};

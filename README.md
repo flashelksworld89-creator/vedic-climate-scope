@@ -1,31 +1,19 @@
-# Vedic Climate Scope v1.2
+# Vedic Climate Scope v1.5
 
-Static HTML/CSS/JavaScript. No Vite and no paid API key.
+Static HTML/CSS/JavaScript. No Vite.
 
-## New in v1.2
-- Center wording removed from the wheel.
-- Swiss Ephemeris WebAssembly loaded directly in the browser.
-- Lahiri sidereal planetary longitudes.
-- Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Rahu, Ketu, Uranus, Neptune and Pluto.
-- Mean node for Rahu; Ketu calculated 180 degrees opposite.
-- Live Ascendant from UTC time + latitude + longitude, converted to Lahiri sidereal longitude.
-- Whole Sign house framework.
-- Manual Ascendant remains available and can be selected instead of live ASC.
-- 27 curved nakshatra wedges and 108 pada divisions remain.
-- Device geolocation button uses browser geolocation and requires no API key.
+## New in v1.5
+- Nakshatra names now run radially inward toward the center of the wheel.
+- Planet glyphs now inherit the color of the nakshatra they are currently transiting.
+- Added physical scale presets with radius values for World, Country, State, City, Neighborhood, and Street.
+- Added a visible map radius circle so the active wheel span corresponds to a real geographic distance.
+- Clicked map points now show distance from the epicenter and whether they fall inside the active wheel radius.
+- Center text remains removed.
+- Swiss Ephemeris WebAssembly and Lahiri sidereal calculations remain in the browser.
+- Address search still uses MapTiler and the base map remains Leaflet + OpenStreetMap.
 
 ## Deployment
-Upload all files to the existing GitHub repository and commit. Vercel should redeploy automatically. Framework preset remains Other; no build command and no environment variables are required.
+Replace the existing repository files with the files from this version and commit. Vercel should redeploy automatically.
 
-## Important
-This version takes date/time in UTC. Address search, city centroid calculation, automatic time-zone resolution and the real geographic map overlay are planned for the next stage.
-
-
-## v1.3 Geographic layer
-
-- Added a real Leaflet/OpenStreetMap base map with no API key.
-- Click the map to move the Personal Climate epicenter.
-- Device geolocation and manual latitude/longitude remain available.
-- Scale presets now change map zoom from World through Street.
-- The translucent 27-nakshatra wheel remains fixed over the map with ASC East and DSC West.
-- Address search is intentionally not connected to the public Nominatim endpoint; a self-hosted geocoder is planned to keep the app key-free and respect public-service usage rules.
+## Notes
+This version keeps the project build-free. No Vite is required. The MapTiler key is entered in the browser and saved locally there.
