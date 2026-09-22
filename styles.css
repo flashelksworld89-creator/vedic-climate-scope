@@ -62,3 +62,97 @@
 .planet-node circle{filter:drop-shadow(0 0 5px rgba(255,255,255,.15))}
 .saved-key-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #30374f;background:#0c1019;border-radius:11px;padding:11px 12px;margin-bottom:10px}
 .saved-key-row>div{display:grid;gap:3px}.saved-key-row span{font-size:10px;color:#7f8aa7;text-transform:uppercase;letter-spacing:.08em}.saved-key-row b{font-size:12px;color:#e7ecf8}.saved-key-row .compact{margin:0;width:auto;padding:8px 11px}
+
+/* V1.7 fullscreen climate map + nakshatra street index */
+.map-toolbar{width:100%;display:flex;justify-content:flex-end;margin-bottom:10px}
+.fullscreen-shell{width:100%;position:relative}
+.fullscreen-street-index{display:none}
+.fullscreen-exit{display:none}
+.mini-button{border:1px solid #3a4260;background:#111624;color:#eef2ff;border-radius:9px;min-width:36px;height:36px;cursor:pointer;font-size:18px}
+
+#mapFullscreenShell:fullscreen,
+#mapFullscreenShell:-webkit-full-screen{
+  width:100vw;
+  height:100vh;
+  padding:12px;
+  background:#070910;
+  display:grid;
+  grid-template-columns:minmax(270px,340px) 1fr;
+  gap:12px;
+  overflow:hidden;
+}
+#mapFullscreenShell:fullscreen .fullscreen-street-index,
+#mapFullscreenShell:-webkit-full-screen .fullscreen-street-index{
+  display:flex;
+  position:relative;
+  top:auto;
+  height:auto;
+  min-width:0;
+  padding:14px;
+  border:1px solid #2b3349;
+  border-radius:16px;
+  background:#090d16eF;
+  backdrop-filter:blur(16px);
+  flex-direction:column;
+  overflow:hidden;
+  z-index:700;
+}
+#mapFullscreenShell:fullscreen .map-wheel-stage,
+#mapFullscreenShell:-webkit-full-screen .map-wheel-stage{
+  width:100%;
+  height:calc(100vh - 24px);
+  max-width:none;
+  aspect-ratio:auto;
+  border-radius:16px;
+  overflow:hidden;
+}
+#mapFullscreenShell:fullscreen .climate-map,
+#mapFullscreenShell:-webkit-full-screen .climate-map{border-radius:16px}
+#mapFullscreenShell:fullscreen .map-wheel-overlay,
+#mapFullscreenShell:-webkit-full-screen .map-wheel-overlay{
+  width:min(92vh,92%);
+  height:min(92vh,92%);
+  max-width:calc(100% - 24px);
+  max-height:calc(100% - 24px);
+}
+#mapFullscreenShell:fullscreen .fullscreen-exit,
+#mapFullscreenShell:-webkit-full-screen .fullscreen-exit{
+  display:grid;
+  place-items:center;
+  position:absolute;
+  top:12px;
+  right:12px;
+  z-index:800;
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  border:1px solid #65708d;
+  background:#090d16dd;
+  color:#fff;
+  font-size:26px;
+  line-height:1;
+  cursor:pointer;
+}
+.street-index-title{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid #293147}
+.street-index-title>div{display:grid;gap:4px;min-width:0}
+.street-index-title b{font-size:13px;color:#f0f3fb}
+.street-index-status{min-height:26px;padding:9px 0;color:#7f8aa7;font-size:10px;line-height:1.35}
+.street-index-body{display:grid;gap:7px;overflow-y:auto;padding-right:3px;scrollbar-width:thin;min-height:0}
+.street-index-row{display:grid;grid-template-columns:5px 1fr;gap:9px;border:1px solid #283047;background:#0d121d;border-radius:10px;padding:9px 10px 9px 7px}
+.street-index-color{width:5px;border-radius:999px;min-height:36px}
+.street-index-copy{min-width:0;display:grid;gap:4px}
+.street-index-head{display:flex;gap:7px;align-items:baseline;min-width:0}
+.street-index-head b{font-size:11px;color:#eef2ff;white-space:nowrap}
+.street-index-head span{font-size:11px;color:#aab4d0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.street-index-streets{font-size:10px;color:#7f8aa7;line-height:1.35}
+.street-index-empty{border:1px dashed #333c55;border-radius:10px;padding:14px;color:#7f8aa7;font-size:11px;line-height:1.45;text-align:center}
+
+@media(max-width:760px){
+  #mapFullscreenShell:fullscreen,
+  #mapFullscreenShell:-webkit-full-screen{grid-template-columns:210px 1fr;padding:8px;gap:8px}
+  #mapFullscreenShell:fullscreen .map-wheel-stage,
+  #mapFullscreenShell:-webkit-full-screen .map-wheel-stage{height:calc(100vh - 16px)}
+  #mapFullscreenShell:fullscreen .fullscreen-street-index,
+  #mapFullscreenShell:-webkit-full-screen .fullscreen-street-index{padding:10px}
+  .street-index-head{display:grid;gap:2px}.street-index-streets{font-size:9px}
+}
