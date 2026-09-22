@@ -1,17 +1,18 @@
-# Vedic Climate Scope v2.8 — Confirmation-Gated Forecast Prototype
+# Vedic Climate Scope v3.1 — Automatic Street Index
 
 Static HTML/CSS/JavaScript. No Vite.
 
-## What changed
-- Replaced the visible location-horoscope generator with a confirmation-gated evidence engine.
-- A forecast theme is allowed only when at least two independent factor types support it.
-- Independent factor types currently include Climate House, zodiac, nakshatra, sign lord, nakshatra lord, transit governor, Moon, aspects, Gandanta, and Bhavat Bhavam.
-- Mixed or weak evidence is explicitly withheld instead of padded into a generic prediction.
-- The forecast shows a Confirmed/Withheld badge and an expandable Evidence Ledger.
-- Personal roles remain excluded from the city-climate prediction path.
+## New in v3.1
+- Selecting a city automatically starts the city road-network index.
+- Raw OpenStreetMap road geometry is cached in IndexedDB by city, center, and radius.
+- Reopening the same city reuses the cached road network instead of downloading it again.
+- Changing transit time reclassifies cached street segments under the rotating zodiac/nakshatra wheel without redownloading streets.
+- Fullscreen street index now has three views: By Nakshatra, By Street, and By Planet.
+- Refresh clears the current city cache and rebuilds it from OpenStreetMap.
+- Old “Build streets” instructions were removed.
 
-## Design references
-This version adopts the structural idea of an evidence/confirmation gate used by KOSMA, while retaining the existing Vedic Climate Scope map and sidereal calculations. The broader calculation surface was also reviewed against open-source Jyotish projects such as Jyotish Dashboard and astrology-insights. No Vite migration is required.
+## Street classification
+Each named road segment is classified by its midpoint against the fixed city wheel: Climate House, zodiac sign, nakshatra, and current transit governor. Long roads can appear in multiple zones when their geometry crosses sector boundaries.
 
 ## Deployment
-Replace the current repository files with this version and commit. Vercel should redeploy automatically.
+Replace the existing repository files with this version and commit. Vercel should redeploy automatically.

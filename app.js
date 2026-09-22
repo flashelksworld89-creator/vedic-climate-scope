@@ -9,12 +9,18 @@ const now=new Date();
 const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
-let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,roadWays:[],roadNetwork:[],roadNetworkStatus:'',roadNetworkLoading:false,roadNetworkLayer:null,roadNetworkCount:0,mapKeyTest:'',horoscopeArea:'Overview'};
+let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,cityLatitude:DEFAULT_LAT,cityLongitude:DEFAULT_LON,cityName:'Las Vegas',cityRadiusKm:38,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapEpicenterMarker:null,mapWheelMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,roadWays:[],roadNetwork:[],roadNetworkStatus:'',roadNetworkLoading:false,roadNetworkLayer:null,roadNetworkCount:0,mapKeyTest:'',horoscopeArea:'Overview',streetIndexView:'nakshatra',roadCacheStatus:'',autoStreetLoad:true};
 const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
 function cloneDefaultProfile(){return JSON.parse(JSON.stringify(DEFAULT_PROFILE))}
 function safeGet(key){try{return localStorage.getItem(key)}catch{return null}}
 function safeSet(key,value){try{localStorage.setItem(key,value)}catch{}}
+const ROAD_DB_NAME='VedicClimateRoadCache',ROAD_DB_VERSION=1,ROAD_STORE='cities';
+function openRoadDB(){return new Promise((resolve,reject)=>{try{const req=indexedDB.open(ROAD_DB_NAME,ROAD_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(ROAD_STORE))db.createObjectStore(ROAD_STORE,{keyPath:'key'})};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)}catch(e){reject(e)}})}
+function roadCacheKey(){return `${String(state.cityName||'city').toLowerCase()}|${(+state.cityLatitude).toFixed(4)}|${(+state.cityLongitude).toFixed(4)}|${cityRadiusKm().toFixed(1)}`}
+async function loadRoadCache(){try{const db=await openRoadDB();const key=roadCacheKey();const item=await new Promise((resolve,reject)=>{const tx=db.transaction(ROAD_STORE,'readonly'),req=tx.objectStore(ROAD_STORE).get(key);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)});db.close();if(!item?.ways?.length)return false;state.roadWays=item.ways;state.roadNetworkCount=item.roadCount||item.ways.length;reclassifyRoadNetwork();state.roadNetworkStatus=`Loaded ${state.roadNetworkCount.toLocaleString()} roads from browser cache.`;state.streetIndexStatus=state.roadNetworkStatus;state.roadCacheStatus='cached';updateStreetIndexPanel();return true}catch(e){console.warn('Road cache load failed',e);state.roadCacheStatus='unavailable';return false}}
+async function saveRoadCache(){if(!state.roadWays.length)return;try{const db=await openRoadDB();const payload={key:roadCacheKey(),city:state.cityName,lat:+state.cityLatitude,lon:+state.cityLongitude,radiusKm:cityRadiusKm(),roadCount:state.roadNetworkCount||state.roadWays.length,ways:state.roadWays,savedAt:Date.now()};await new Promise((resolve,reject)=>{const tx=db.transaction(ROAD_STORE,'readwrite');tx.objectStore(ROAD_STORE).put(payload);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close();state.roadCacheStatus='cached'}catch(e){console.warn('Road cache save failed',e);state.roadCacheStatus='unavailable'}}
+async function clearRoadCacheForCity(){try{const db=await openRoadDB();await new Promise((resolve,reject)=>{const tx=db.transaction(ROAD_STORE,'readwrite');tx.objectStore(ROAD_STORE).delete(roadCacheKey());tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(e){console.warn(e)}}
 function loadProfile(){try{return JSON.parse(safeGet('vedicProfile'))||cloneDefaultProfile()}catch{return cloneDefaultProfile()}}
 function save(){safeSet('vedicProfile',JSON.stringify(state.profile))}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
@@ -466,6 +472,51 @@ function cityForecastData(){
   const houseActivity=Array.from({length:12},(_,i)=>({house:i+1,planets:activePlanets().filter(p=>climateHouseForLongitude(p.longitude)===i+1),segments:state.roadNetwork.filter(s=>s.house===i+1).length})).sort((a,b)=>(b.planets.length*5+b.segments/50)-(a.planets.length*5+a.segments/50));
   return {zones,tense,supportive,gstreets,houseActivity};
 }
+
+function buildCityEvidenceLedger(d){
+  const ledger=[];
+  const topZones=d.zones.slice(0,6);
+  topZones.forEach((z,rank)=>{
+    const rankWeight=Math.max(.45,1.20-rank*.12);
+    (NAK_THEME_MAP[z.nak.name]||[]).slice(0,2).forEach((t,i)=>addEvidence(ledger,'city_nakshatra',t,rankWeight-i*.12,`${z.direction} H${z.house}: ${z.nak.name} is one of the city's most activated nakshatra zones.`));
+    (SIGN_THEME_MAP[z.sign.name]||[]).slice(0,2).forEach((t,i)=>addEvidence(ledger,'city_zodiac',t,rankWeight*.78-i*.10,`${z.sign.name} is emphasized in the ${z.direction} city sector.`));
+    (HOUSE_THEME_MAP[z.house]||[]).slice(0,2).forEach((t,i)=>addEvidence(ledger,'city_house',t,rankWeight*.82-i*.10,`Climate House ${z.house} is emphasized in the ${z.direction} sector.`));
+    const sl=z.signLord,nl=z.nakLord;
+    if(sl)for(const t of (PLANET_THEME_MAP[sl.name]||[]).slice(0,2))addEvidence(ledger,'city_sign_lord',t,.66,`Sign lord ${sl.name} conditions the ${z.sign.name}/${z.nak.name} sector from ${sl.sign}/${sl.nak.name}.`);
+    if(nl)for(const t of (PLANET_THEME_MAP[nl.name]||[]).slice(0,2))addEvidence(ledger,'city_nakshatra_lord',t,.78,`Nakshatra lord ${nl.name} conditions ${z.nak.name} from ${nl.sign}/${nl.nak.name}.`);
+    for(const g of z.govRecords||[])for(const t of (PLANET_THEME_MAP[g.name]||[]).slice(0,2))addEvidence(ledger,'city_transit_governor',t,1.20,`${g.name} is a current transit governor in ${z.direction} H${z.house}.`);
+    if(z.streetCount>=10){for(const t of (NAK_THEME_MAP[z.nak.name]||[]).slice(0,1))addEvidence(ledger,'street_concentration',t,.48,`${z.streetCount} named streets cross the ${z.nak.name} zone.`)}
+  });
+  const hot=d.houseActivity[0];
+  if(hot){(HOUSE_THEME_MAP[hot.house]||[]).forEach((t,i)=>addEvidence(ledger,'house_activity',t,1.0-i*.14,`Climate House ${hot.house} is the city's most activated house${hot.planets.length?` with ${hot.planets.map(p=>p.name).join(', ')}`:''}.`))}
+  const moon=planetClimateRecord('Moon');
+  if(moon){for(const t of uniquePhrases([...(PLANET_THEME_MAP.Moon||[]),...(NAK_THEME_MAP[moon.nak.name]||[]).slice(0,1)]))addEvidence(ledger,'moon',t,.68,`Moon is in ${moon.sign}/${moon.nak.name}, Climate House ${moon.climateHouse}.`)}
+  const tense=d.tense[0];
+  if(tense){addEvidence(ledger,'city_aspect','pressure',1.08,`${tense.a.name} ${tense.type} ${tense.b.name} forms the strongest tense city axis.`);for(const t of uniquePhrases([...(PLANET_THEME_MAP[tense.a.name]||[]),...(PLANET_THEME_MAP[tense.b.name]||[]) ]).slice(0,2))addEvidence(ledger,'city_aspect',t,.72,`${tense.a.name} ${tense.type} ${tense.b.name} modifies the city field.`)}
+  const supportive=d.supportive[0];
+  if(supportive){for(const t of uniquePhrases([...(PLANET_THEME_MAP[supportive.a.name]||[]),...(PLANET_THEME_MAP[supportive.b.name]||[]) ]).slice(0,2))addEvidence(ledger,'supportive_aspect',t,.72,`${supportive.a.name} ${supportive.type} ${supportive.b.name} provides a supportive flow.`)}
+  const coreCount=d.gstreets.core.reduce((n,x)=>n+x.streets.length,0),broadCount=d.gstreets.broad.reduce((n,x)=>n+x.streets.length,0);
+  if(coreCount||broadCount)addEvidence(ledger,'gandanta','transition',coreCount?1.35:.85,`${coreCount} core and ${broadCount} broader-band street names currently intersect Gandanta transitions.`);
+  return ledger;
+}
+function gatedCityForecast(d=cityForecastData()){
+  const ledger=buildCityEvidenceLedger(d),ranked=confirmedThemeSummary(ledger),confirmed=ranked.filter(x=>x.confirmed),primary=confirmed[0],secondary=confirmed[1];
+  const withheld=ranked.filter(x=>!x.confirmed&&x.score>.75).slice(0,4);
+  if(!primary)return {withheld:true,confidence:0,theme:`No dominant ${state.cityName} climate theme cleared the confirmation gate.`,manifestations:['Citywide factors are mixed rather than converging on one dominant condition.'],bestUse:'Best use: read individual sectors rather than forcing one citywide conclusion.',caution:'Watch for: do not generalize one highly active zone to the entire city.',why:ledger.slice(0,12).map(e=>e.text),withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
+  const P=FORECAST_THEMES[primary.theme],S=secondary?FORECAST_THEMES[secondary.theme]:null;
+  const manifestations=[`Across the city, ${P.label.toLowerCase()} is supported by ${primary.kinds.length} independent factor types.`,S?`${S.label} is the strongest secondary citywide theme.`:null].filter(Boolean);
+  const topZone=d.zones[0];if(topZone)manifestations.push(`The strongest mapped concentration is ${topZone.direction} · H${topZone.house} · ${topZone.sign.name}/${topZone.nak.name}.`);
+  const why=[`City confirmation gate: ${primary.kinds.length} independent factor types · score ${primary.score.toFixed(2)}`,...uniquePhrases(primary.support.map(e=>e.text)).slice(0,7)];
+  if(secondary)why.push(`Secondary: ${S.label} · ${secondary.kinds.length} factor types · score ${secondary.score.toFixed(2)}`);
+  if(withheld.length)why.push(`Withheld city themes: ${withheld.map(x=>FORECAST_THEMES[x.theme].label).join(', ')}`);
+  return {withheld:false,confidence:primary.kinds.length,theme:`${P.label} is the leading confirmed ${state.cityName} city-climate theme${S?`; ${S.label.toLowerCase()} is secondary`:''}.`,manifestations:uniquePhrases(manifestations).slice(0,3),bestUse:`Best use: ${P.best}.`,caution:`Watch for: ${P.watch}.`,why,confirmed:confirmed.slice(0,3).map(x=>FORECAST_THEMES[x.theme].label),withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
+}
+function cityGateHTML(d){
+  const f=gatedCityForecast(d);
+  const badge=f.withheld?`<span class="gate-badge withheld">Withheld · insufficient citywide confirmation</span>`:`<span class="gate-badge confirmed">Confirmed city climate · ${f.confidence} factor types</span>`;
+  return `<div class="city-gated-forecast">${badge}<p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>Citywide pattern</span><ul>${f.manifestations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.bestUse)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>City evidence ledger</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`;
+}
+
 function zoneAdvice(z){
   if(z.edgeGandanta)return `Use this as a transition zone: keep plans flexible, verify timing and directions, and favor review or completion over unnecessary escalation.`;
   if(z.house===10||z.house===11)return `Good for visible work, coordination, networking, and goal-oriented movement when the local transit governor is supported.`;
@@ -477,18 +528,19 @@ function cityForecastDashboard(){
   const d=cityForecastData(),top=d.zones.slice(0,4),tense=d.tense[0],support=d.supportive[0];
   const coreCount=d.gstreets.core.reduce((n,x)=>n+x.streets.length,0),broadCount=d.gstreets.broad.reduce((n,x)=>n+x.streets.length,0);
   return `<section id="cityForecastDashboard" class="panel city-dashboard">
-    <div class="panel-head"><div><span class="eyebrow">CITY FORECAST DASHBOARD</span><h2>${esc(state.cityName)} climate overview</h2></div><div class="dashboard-status">${state.roadNetwork.length?`${state.roadNetworkCount.toLocaleString()} roads indexed`:'Build streets in fullscreen for road-level counts'}</div></div>
+    <div class="panel-head"><div><span class="eyebrow">CITY FORECAST DASHBOARD</span><h2>${esc(state.cityName)} climate overview</h2></div><div class="dashboard-status">${state.roadNetwork.length?`${state.roadNetworkCount.toLocaleString()} roads indexed`:'Street network loads automatically after city selection'}</div></div>
+    ${cityGateHTML(d)}
     <div class="dashboard-grid">
       ${top.map((z,i)=>`<article class="zone-card"><div class="zone-rank">${i+1}</div><div><span>${z.direction} · H${z.house}</span><h3>${z.sign.glyph} ${esc(z.sign.name)} / ${esc(z.nak.name)}</h3><p>${z.governors.length?`Transit governor: ${z.governors.map(g=>`${g.glyph} ${esc(g.name)}`).join(' · ')}`:`Nakshatra lord: ${esc(z.nak.lord)}`}</p><p>${z.streetCount?`${z.streetCount} named streets cross this zone.`:'Street count available after city network build.'}</p><small>${esc(zoneAdvice(z))}</small></div></article>`).join('')}
     </div>
     <div class="dashboard-secondary">
       <div class="dashboard-card"><span>Strongest tense axis</span><b>${tense?`${tense.a.glyph} ${esc(tense.a.name)} ${tense.type} ${tense.b.glyph} ${esc(tense.b.name)}`:'No tight square/opposition in current major-aspect scan'}</b>${tense?`<small>${direction8(bearingForLongitude(tense.a.longitude))} H${climateHouseForLongitude(tense.a.longitude)} ↔ ${direction8(bearingForLongitude(tense.b.longitude))} H${climateHouseForLongitude(tense.b.longitude)} · orb ${tense.orb.toFixed(2)}°</small>`:''}</div>
       <div class="dashboard-card"><span>Supportive flow</span><b>${support?`${support.a.glyph} ${esc(support.a.name)} ${support.type} ${support.b.glyph} ${esc(support.b.name)}`:'No tight trine/sextile in current major-aspect scan'}</b>${support?`<small>Use sectors touched by this aspect for lower-friction coordination; orb ${support.orb.toFixed(2)}°.</small>`:''}</div>
-      <div class="dashboard-card"><span>Most activated Climate House</span><b>H${d.houseActivity[0]?.house||'—'}${d.houseActivity[0]?.planets?.length?` · ${d.houseActivity[0].planets.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · ')}`:''}</b><small>${d.houseActivity[0]?.segments?`${d.houseActivity[0].segments} classified street segments currently fall in this house.`:'Street-segment count available after network build.'}</small></div>
+      <div class="dashboard-card"><span>Most activated Climate House</span><b>H${d.houseActivity[0]?.house||'—'}${d.houseActivity[0]?.planets?.length?` · ${d.houseActivity[0].planets.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · ')}`:''}</b><small>${d.houseActivity[0]?.segments?`${d.houseActivity[0].segments} classified street segments currently fall in this house.`:'Street-segment count appears after the automatic city index finishes.'}</small></div>
       <div class="dashboard-card gandanta-card"><span>Gandanta transitions</span><b>${coreCount} core street names · ${broadCount} broader-band street names</b><small>Core = ±0°48′ around the water→fire junction. Broad transition band = ±3°20′. These are sensitivity flags, not automatic negative outcomes.</small></div>
     </div>
     <details class="gandanta-details"><summary>Gandanta zones & practical advice</summary>
-      <div class="gandanta-grid">${GANDANTA_JUNCTIONS.map(j=>{const core=d.gstreets.core.find(x=>x.label===j.label),broad=d.gstreets.broad.find(x=>x.label===j.label);const names=[...(core?.streets||[]),...(broad?.streets||[])].filter((x,i,a)=>a.indexOf(x)===i).slice(0,12);return `<div><b>${esc(j.label)}</b><span>${esc(j.waterSign)} → ${esc(j.fireSign)}</span><p>${esc(gandantaAdvice({core:true,label:j.label}))}</p><small>${names.length?`Indexed streets: ${names.map(esc).join(' · ')}`:'Build the street network to list roads crossing this junction.'}</small></div>`}).join('')}</div>
+      <div class="gandanta-grid">${GANDANTA_JUNCTIONS.map(j=>{const core=d.gstreets.core.find(x=>x.label===j.label),broad=d.gstreets.broad.find(x=>x.label===j.label);const names=[...(core?.streets||[]),...(broad?.streets||[])].filter((x,i,a)=>a.indexOf(x)===i).slice(0,12);return `<div><b>${esc(j.label)}</b><span>${esc(j.waterSign)} → ${esc(j.fireSign)}</span><p>${esc(gandantaAdvice({core:true,label:j.label}))}</p><small>${names.length?`Indexed streets: ${names.map(esc).join(' · ')}`:'Street names appear after the automatic city index finishes.'}</small></div>`}).join('')}</div>
     </details>
   </section>`;
 }
@@ -558,6 +610,7 @@ function drawRoadNetworkLayer(){
 async function buildCityRoadNetwork(force=false){
   if(state.roadNetworkLoading)return;
   if(state.roadNetwork.length&&!force){buildStreetIndexFromNetwork();drawRoadNetworkLayer();updateStreetIndexPanel();return}
+  if(!force){const cached=await loadRoadCache();if(cached)return}
   state.roadNetworkLoading=true;state.streetIndexLoading=true;state.roadNetworkStatus='Connecting to OpenStreetMap road servers…';state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
   const boxes=splitBBoxGrid(cityBBox(),5,5),byId=new Map();let cursor=0,done=0,failures=0;const errors=[];
   async function worker(workerIndex){
@@ -583,7 +636,7 @@ async function buildCityRoadNetwork(force=false){
     state.roadWays=[...byId.values()];const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));
     state.roadNetwork=segments;state.roadNetworkCount=byId.size;
     buildStreetIndexFromNetwork();drawRoadNetworkLayer();
-    state.roadNetworkStatus=`Indexed ${byId.size.toLocaleString()} named road ways into ${segments.length.toLocaleString()} astrological street sectors${failures?` · ${failures} of ${boxes.length} sections unavailable`:''}.`;
+    state.roadNetworkStatus=`Indexed ${byId.size.toLocaleString()} named road ways into ${segments.length.toLocaleString()} astrological street sectors${failures?` · ${failures} of ${boxes.length} sections unavailable`:''}.`;await saveRoadCache();
   }catch(e){
     console.error('Street network build failed',e);
     state.roadWays=[];state.roadNetwork=[];state.streetIndex=[];state.roadNetworkCount=0;
@@ -592,10 +645,26 @@ async function buildCityRoadNetwork(force=false){
     state.roadNetworkLoading=false;state.streetIndexLoading=false;state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();updateCityDashboardPanel();
   }
 }
+function streetIndexByNakshatraHTML(){
+  return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);const shown=row.streets.slice(0,18),more=Math.max(0,row.streetCount-shown.length);const g=['Ashwini','Magha','Mula','Ashlesha','Jyeshtha','Revati'].includes(row.nakshatra);return `<div class="street-index-row ${g?'gandanta-row':''}"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}${g?' · Gandanta edge':''}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
+}
+function streetIndexByStreetHTML(){
+  const map=new Map();
+  for(const seg of state.roadNetwork){if(!seg.name)continue;let rec=map.get(seg.name);if(!rec){rec={name:seg.name,zones:new Map(),highway:seg.highway};map.set(seg.name,rec)}const k=`${seg.nakIndex}|${seg.house}`;rec.zones.set(k,{nakIndex:seg.nakIndex,nakshatra:seg.nakshatra,sign:seg.sign,signGlyph:seg.signGlyph,house:seg.house})}
+  const rows=[...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  return rows.map(r=>`<div class="street-index-row street-name-row"><div class="street-index-copy"><div class="street-index-head"><b>${esc(r.name)}</b><span>${esc(r.highway||'road')}</span></div><div class="street-index-streets">${[...r.zones.values()].map(z=>`<span class="zone-chip" style="border-color:${nakColor(z.nakIndex,.7)}">${z.signGlyph} ${esc(z.sign)} · ${esc(z.nakshatra)} · H${z.house}</span>`).join('')}</div></div></div>`).join('');
+}
+function streetIndexByPlanetHTML(){
+  const groups=[];
+  for(const p of activePlanets()){const n=nakInfo(p.longitude),row=state.streetIndex[n.index];groups.push({planet:p,nak:n,row})}
+  return groups.map(g=>{const shown=(g.row?.streets||[]).slice(0,20),more=Math.max(0,(g.row?.streetCount||0)-shown.length);return `<div class="street-index-row planet-index-row"><div class="street-index-color" style="background:${nakColor(g.nak.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${g.planet.glyph} ${esc(g.planet.name)}</b><span>${esc(g.nak.name)} · Pada ${g.nak.pada}</span></div><div class="street-index-governors">${SIGN_GLYPHS[Math.floor(norm(g.planet.longitude)/30)]} ${esc(SIGNS[Math.floor(norm(g.planet.longitude)/30)])} ${((norm(g.planet.longitude)%30)).toFixed(2)}°</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed in this nakshatra'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
+}
 function streetIndexHTML(){
   if(state.roadNetworkLoading)return `<div class="street-index-empty">${esc(state.roadNetworkStatus||'Loading city street network…')}</div>`;
-  if(!state.streetIndex.length)return `<div class="street-index-empty"><b>City street network not loaded.</b><br>Use “Build streets” to classify named OpenStreetMap roads across the fixed city wheel. If a public road server rejects the request, the exact error will appear here.</div>`;
-  return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);const shown=row.streets.slice(0,14),more=Math.max(0,row.streetCount-shown.length);const g=['Ashwini','Magha','Mula','Ashlesha','Jyeshtha','Revati'].includes(row.nakshatra);return `<div class="street-index-row ${g?'gandanta-row':''}"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}${g?' · Gandanta edge':''}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
+  if(!state.streetIndex.length)return `<div class="street-index-empty"><b>Street network is preparing.</b><br>After you select a city, the app loads cached roads automatically or builds the city road index once and saves it in this browser.</div>`;
+  if(state.streetIndexView==='street')return streetIndexByStreetHTML();
+  if(state.streetIndexView==='planet')return streetIndexByPlanetHTML();
+  return streetIndexByNakshatraHTML();
 }
 function extractRoadNames(data){
   const features=data?.features||[];
@@ -616,11 +685,12 @@ async function reverseRoadNames(lat,lon){
   return extractRoadNames(await r.json());
 }
 async function buildStreetIndex(force=false){return buildCityRoadNetwork(force)}
+function renderStreetViewTabs(){document.querySelectorAll('[data-street-view]').forEach(b=>b.classList.toggle('active',b.dataset.streetView===state.streetIndexView))}
 function updateStreetIndexPanel(){const body=document.querySelector('#streetIndexBody');if(body)body.innerHTML=streetIndexHTML();const status=document.querySelector('#streetIndexStatus');if(status)status.textContent=state.streetIndexStatus||''}
 async function enterMapFullscreen(){
   const shell=document.querySelector('#mapFullscreenShell');if(!shell)return;
   try{await shell.requestFullscreen();}catch(e){state.searchStatus=`Fullscreen unavailable: ${e.message}`;render();return}
-  setTimeout(()=>{if(state.map)state.map.invalidateSize();if(state.roadNetwork.length)buildStreetIndex(false)},120);
+  setTimeout(()=>{if(state.map)state.map.invalidateSize();if(state.roadNetwork.length)buildStreetIndex(false);else if(state.autoStreetLoad)buildCityRoadNetwork(false)},120);
 }
 async function exitMapFullscreen(){if(document.fullscreenElement)await document.exitFullscreen()}
 function distanceKm(lat1,lon1,lat2,lon2){
@@ -674,6 +744,7 @@ function selectSearchResult(i){
   state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);
   const oldTz=state.timeZone;state.timeZone=lookupTimeZone(state.cityLatitude,state.cityLongitude);try{const instant=zonedInputToDate(state.localDateTime,oldTz);state.localDateTime=toZonedInput(instant,state.timeZone)}catch{}
   state.searchResults=[];calculateTransit();
+  if(isCity&&state.autoStreetLoad)setTimeout(()=>buildCityRoadNetwork(false),350);
 }
 
 async function initEngine(){
@@ -813,7 +884,7 @@ function climateView(){
     </section>
     <section class="panel wheel-panel primary-map-panel">
       <div class="map-toolbar persistent-map-toolbar"><button id="fullscreenMap" class="action secondary compact">⛶ Fullscreen map</button></div>
-      <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Transit governors · Streets</b></div><div class="street-index-actions"><button id="buildRoadNetwork" class="mini-button wide" title="Build city street network">Build streets</button><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
+      <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">CITY STREET INDEX</span><b>Live zodiac · nakshatra · planet classification</b></div><div class="street-index-actions"><button id="refreshStreetIndex" class="mini-button" title="Refresh road cache">↻</button></div></div><div class="street-index-tabs"><button data-street-view="nakshatra" class="${state.streetIndexView==='nakshatra'?'active':''}">By Nakshatra</button><button data-street-view="street" class="${state.streetIndexView==='street'?'active':''}">By Street</button><button data-street-view="planet" class="${state.streetIndexView==='planet'?'active':''}">By Planet</button></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'Road index loads automatically after city selection.')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
       <div class="map-caption"><span>${esc(state.cityName)} fixed wheel</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span><span>${state.roadNetworkCount?`${state.roadNetworkCount.toLocaleString()} named roads indexed`:'street network not indexed'}</span></div>
     </section>
   </div>
@@ -821,22 +892,8 @@ function climateView(){
   ${locationHoroscopePanel()}`;
 }
 
-function horoscopeView(){return `<div class="grid two"><section class="panel hero-panel"><span class="eyebrow">DAILY HOROSCOPE</span><h1>Structured Vedic forecasting</h1><p>The forecast layer uses the geographic Climate House, sign lord, nakshatra lord, transit governor, current Moon, planetary positions, aspects, and Bhavat Bhavam. Personal natal roles are intentionally excluded from this city-climate forecast layer.</p></section><section class="panel"><h2>Life areas</h2><div class="life-grid">${['Daily Overview','Self & Direction','Home & Family','Relationships','Career & Work','Money & Earning','Health & Vitality','Travel','Neighbors & Local Activity','Creativity & Children','Spiritual Life','Personal Climate'].map((x,i)=>`<button><span>${String(i+1).padStart(2,'0')}</span>${x}</button>`).join('')}</div></section></div>`}
-
-async function testMapKey(){
-  if(!state.maptilerKey){state.mapKeyTest='No key saved.';render();return}
-  state.mapKeyTest='Testing this deployment…';render();
-  try{
-    const fwd=`https://api.maptiler.com/geocoding/Las%20Vegas.json?limit=1&key=${encodeURIComponent(state.maptilerKey)}`;
-    const rev=`https://api.maptiler.com/geocoding/-115.1398,36.1699.json?types=road&limit=1&key=${encodeURIComponent(state.maptilerKey)}`;
-    const [a,b]=await Promise.all([fetch(fwd),fetch(rev)]);
-    if(a.ok&&b.ok)state.mapKeyTest=`Key works for search and street lookup from ${window.location.host}.`;
-    else state.mapKeyTest=`Key test failed: search HTTP ${a.status}, street lookup HTTP ${b.status}. Current host: ${window.location.host}.`;
-  }catch(e){state.mapKeyTest=`Key test error: ${e.message}`}
-  render();
-}
-
 function settingsView(){
+  const p=state.profile;
   return `<div class="grid two">
     <section class="panel">
       <span class="eyebrow">CALCULATION SPECIFICATION</span>
@@ -845,16 +902,24 @@ function settingsView(){
         <div><span>Zodiac</span><b>Sidereal</b></div>
         <div><span>Ayanamsa</span><b>Lahiri</b></div>
         <div><span>Nodes</span><b>Mean Rahu/Ketu</b></div>
-        <div><span>Houses</span><b>Whole Sign</b></div>
+        <div><span>Houses</span><b>Climate houses + Whole Sign support</b></div>
         <div><span>Outer planets</span><b>Uranus · Neptune · Pluto</b></div>
         <div><span>Wheel orientation</span><b>ASC East · DSC West</b></div>
+      </div>
+      <h3 class="top-gap">Manual ASC fallback</h3>
+      <p class="help-note">Only used when you choose Manual ASC on Climate Scope.</p>
+      <div class="form-grid">
+        <label>Sign<select id="ascSign">${SIGNS.map(x=>`<option ${x===p.ascSign?'selected':''}>${x}</option>`).join('')}</select></label>
+        <label>Degree<input id="ascDegree" type="number" min="0" max="29" value="${p.ascDegree}"></label>
+        <label>Minute<input id="ascMinute" type="number" min="0" max="59" value="${p.ascMinute}"></label>
+        <label>Second<input id="ascSecond" type="number" min="0" max="59" value="${p.ascSecond}"></label>
       </div>
     </section>
     <section class="panel">
       <span class="eyebrow">MAP SETTINGS</span>
-      <h2>Map key</h2>
+      <h2>Map connection</h2>
       ${state.maptilerKey
-        ? `<div class="status-line"><b>Map key saved in this browser.</b></div><button id="testMapKey" class="action primary">Test key on this deployment</button><button id="changeMapKey" class="action secondary">Replace saved key</button>`
+        ? `<div class="status-line"><b>Map service connected in this browser.</b></div><button id="testMapKey" class="action primary">Test connection</button><button id="changeMapKey" class="action secondary">Change map key</button>`
         : `<label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste MapTiler key"></label><button id="saveMapKey" class="action primary">Save map key</button>`}
       ${state.mapKeyTest?`<div class="status-line">${esc(state.mapKeyTest)}</div>`:''}
       <div class="status-line">Allowed HTTP Origin hostname:<br><b>${esc(window.location.host)}</b></div>
@@ -904,14 +969,10 @@ function moveMapToState(){
   updateGeographicWheel();
 }
 
-function render(){document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Climate Scope'],['horoscope','✦','Daily Horoscope'],['profile','◎','Profile'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav><button id="reset" class="reset">Reset saved profile</button></aside><main><header><div><span class="eyebrow">SIDEREAL ASTROLOGY PLATFORM</span><h1>${state.tab==='climate'?'Personal Climate Scope':state.tab==='profile'?'Personal Astrology Profile':state.tab==='horoscope'?'Daily Vedic Horoscope':'Calculation Settings'}</h1></div><div class="pill">Lahiri · 27 Nakshatras · Bhavat Bhavam</div></header>${state.tab==='profile'?profileView():state.tab==='climate'?climateView():state.tab==='horoscope'?horoscopeView():settingsView()}</main></div>`;bind();initClimateMap()}
+function render(){document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Climate Scope'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav></aside><main><header><div><span class="eyebrow">SIDEREAL ASTROLOGY PLATFORM</span><h1>${state.tab==='climate'?'Climate Scope':'Settings'}</h1></div><div class="pill">Lahiri · 27 Nakshatras · Bhavat Bhavam</div></header>${state.tab==='climate'?climateView():settingsView()}</main></div>`;bind();initClimateMap()}
 
 function bind(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;render()});
-  const reset=document.querySelector('#reset');if(reset)reset.onclick=()=>{state.profile=cloneDefaultProfile();save();render()};
-  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{state.profile.mode=b.dataset.mode;save();render()});
-  document.querySelectorAll('[data-planet]').forEach(b=>b.onclick=()=>{state.selectedPlanet=b.dataset.planet;render()});
-  document.querySelectorAll('[data-house]').forEach(b=>b.onclick=()=>{state.selectedHouse=+b.dataset.house;render()});
   ['ascSign','ascDegree','ascMinute','ascSecond'].forEach(id=>{const e=document.querySelector('#'+id);if(e)e.onchange=()=>{state.profile[id]=e.value;save();render()}});
   const scale=document.querySelector('#scale');if(scale)scale.onchange=()=>{state.scale=scale.value;render()};
   const ascSource=document.querySelector('#ascSource');if(ascSource)ascSource.onchange=()=>{state.useLiveAsc=ascSource.value==='live';render()};
@@ -926,17 +987,13 @@ function bind(){
   const searchInput=document.querySelector('#placeSearch');if(searchInput)searchInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();searchPlace()}};
   const fs=document.querySelector('#fullscreenMap');if(fs)fs.onclick=enterMapFullscreen;
   const fsExit=document.querySelector('#exitFullscreenMap');if(fsExit)fsExit.onclick=exitMapFullscreen;
-  const buildRoad=document.querySelector('#buildRoadNetwork');if(buildRoad)buildRoad.onclick=()=>buildCityRoadNetwork(false);const refreshStreet=document.querySelector('#refreshStreetIndex');if(refreshStreet)refreshStreet.onclick=()=>buildCityRoadNetwork(true);
-  document.onfullscreenchange=()=>{if(state.map)setTimeout(()=>state.map.invalidateSize(),80);if(document.fullscreenElement?.id==='mapFullscreenShell'&&state.roadNetwork.length)buildStreetIndex(false)};
+  document.querySelectorAll('[data-street-view]').forEach(b=>b.onclick=()=>{state.streetIndexView=b.dataset.streetView;updateStreetIndexPanel();renderStreetViewTabs()});const refreshStreet=document.querySelector('#refreshStreetIndex');if(refreshStreet)refreshStreet.onclick=async()=>{await clearRoadCacheForCity();state.roadWays=[];state.roadNetwork=[];state.streetIndex=[];state.roadNetworkCount=0;await buildCityRoadNetwork(true)};
+  document.onfullscreenchange=()=>{if(state.map)setTimeout(()=>state.map.invalidateSize(),80);if(document.fullscreenElement?.id==='mapFullscreenShell'){if(state.roadNetwork.length)buildStreetIndex(false);else if(state.autoStreetLoad)buildCityRoadNetwork(false)}};
   document.querySelectorAll('[data-search-result]').forEach(b=>b.onclick=()=>selectSearchResult(+b.dataset.searchResult));
   document.querySelectorAll('[data-horoscope-area]').forEach(b=>b.onclick=()=>{state.horoscopeArea=b.dataset.horoscopeArea;render()});
   const loc=document.querySelector('#useLocation');if(loc)loc.onclick=()=>{if(!navigator.geolocation){state.engineMessage='Browser geolocation is unavailable.';render();return}loc.disabled=true;loc.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{state.latitude=+pos.coords.latitude.toFixed(6);state.longitude=+pos.coords.longitude.toFixed(6);state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);render()},err=>{state.engineMessage=`Location not available: ${err.message}`;render()},{enableHighAccuracy:true,timeout:10000})};
   const centerMap=document.querySelector('#centerMap');if(centerMap)centerMap.onclick=()=>{const a=document.querySelector('#latitude'),o=document.querySelector('#longitude');state.latitude=+a.value;state.longitude=+o.value;state.selectedMapPoint=analyzeMapPoint(state.latitude,state.longitude);moveMapToState();render()};
   const calc=document.querySelector('#calculate');if(calc)calc.onclick=()=>calculateTransit();
-  const ap=document.querySelector('#addPlanetRole');if(ap)ap.onclick=()=>{const e=document.querySelector('#planetRoleInput'),v=e.value.trim();if(v){(state.profile.planetRoles[state.selectedPlanet]??=[]).push(v);save();render()}};
-  document.querySelectorAll('[data-remove-planet]').forEach(b=>b.onclick=()=>{state.profile.planetRoles[state.selectedPlanet].splice(+b.dataset.removePlanet,1);save();render()});
-  const ah=document.querySelector('#addHouseRole');if(ah)ah.onclick=()=>{const e=document.querySelector('#houseRoleInput'),v=e.value.trim();if(v){(state.profile.houseRoles[state.selectedHouse]??=[]).push(v);save();render()}};
-  document.querySelectorAll('[data-remove-house]').forEach(b=>b.onclick=()=>{state.profile.houseRoles[state.selectedHouse].splice(+b.dataset.removeHouse,1);save();render()});
 }
 
 try{render()}catch(err){console.error('Initial render failed',err);const root=document.querySelector('#app');if(root)root.innerHTML=`<main style="padding:24px;font-family:Arial,sans-serif;color:#fff;background:#0b0e17;min-height:100vh"><h1>Vedic Climate Scope</h1><p>The interface hit a browser startup error.</p><pre style="white-space:pre-wrap;color:#ffb4b4">${esc(err?.message||err)}</pre></main>`}

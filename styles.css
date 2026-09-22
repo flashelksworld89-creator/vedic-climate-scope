@@ -292,3 +292,19 @@
 .gate-badge.withheld{background:#342718;border:1px solid #7e6133;color:#f4d59b}
 .gated-forecast .forecast-details summary{cursor:pointer;font-weight:800;color:#cbd5ef}
 .gated-forecast .forecast-details ul{margin-top:10px}
+
+/* V2.9 unified city confirmation gate */
+.city-gated-forecast{display:grid;gap:12px;border:1px solid #2d344a;background:#0b1019;border-radius:14px;padding:16px}
+.city-gated-forecast .forecast-details summary{cursor:pointer;font-weight:800;color:#cbd5ef}
+.city-gated-forecast .forecast-details ul{margin-top:10px}
+
+
+/* V3.1 automatic cached city street index */
+.street-index-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px 10px;border-bottom:1px solid #283047;background:#0b0f18}
+.street-index-tabs button{border:1px solid #30374f;background:#111624;color:#8f99b5;border-radius:9px;padding:8px 6px;font-size:10px;font-weight:800;cursor:pointer}
+.street-index-tabs button.active{background:#263047;color:#fff;border-color:#697792}
+.street-name-row{grid-template-columns:1fr}
+.zone-chip{display:inline-flex;margin:2px 4px 2px 0;padding:4px 7px;border:1px solid #39435f;border-radius:999px;background:#121825;color:#cbd3e7;font-size:9px;white-space:nowrap}
+.planet-index-row .street-index-head b{font-size:14px}
+.street-index-body{scrollbar-width:thin}
+@media(max-width:520px){.street-index-tabs{grid-template-columns:1fr}.zone-chip{white-space:normal}}
