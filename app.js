@@ -58,6 +58,26 @@ function destinationPoint(lat,lon,bearing,distanceKm){
 }
 function signForLongitude(lon){const x=norm(lon),i=Math.floor(x/30);return {name:SIGNS[i],glyph:SIGN_GLYPHS[i],degree:x%30,index:i}}
 function climateHouseForLongitude(lon){return Math.floor(norm(lon-activeAsc())/30)+1}
+const GANDANTA_JUNCTIONS=[
+  {boundary:0,label:'Revati → Ashwini',waterSign:'Pisces',fireSign:'Aries',waterNak:'Revati',fireNak:'Ashwini'},
+  {boundary:120,label:'Ashlesha → Magha',waterSign:'Cancer',fireSign:'Leo',waterNak:'Ashlesha',fireNak:'Magha'},
+  {boundary:240,label:'Jyeshtha → Mula',waterSign:'Scorpio',fireSign:'Sagittarius',waterNak:'Jyeshtha',fireNak:'Mula'}
+];
+const GANDANTA_CORE_DEG=0.8;
+const GANDANTA_BROAD_DEG=10/3;
+function signedDelta(lon,boundary){let d=norm(lon-boundary);if(d>180)d-=360;return d}
+function gandantaInfo(lon){
+  const x=norm(lon);let best=null;
+  for(const j of GANDANTA_JUNCTIONS){const delta=signedDelta(x,j.boundary),abs=Math.abs(delta);if(abs<=GANDANTA_BROAD_DEG&&(!best||abs<best.distance)){best={...j,delta,distance:abs,core:abs<=GANDANTA_CORE_DEG,broad:true,side:delta<0?'water-end':'fire-start'}}}
+  return best;
+}
+function gandantaAdvice(g){
+  if(!g)return null;
+  if(g.core)return `Core Gandanta: treat this as a concentrated transition zone. Favor review, closure, contingency planning, and extra verification before irreversible moves.`;
+  return `Gandanta transition band: allow more transition time, double-check logistics and communication, and avoid forcing a clean outcome before conditions settle.`;
+}
+function direction8(bearing){const dirs=['N','NE','E','SE','S','SW','W','NW'];return dirs[Math.round(norm(bearing)/45)%8]}
+function bearingForLongitude(lon){return norm(lon-activeAsc()+90)}
 function cityRadiusFromBBox(bbox,lat,lon){if(!bbox||bbox.length<4)return 38;const pts=[[bbox[1],bbox[0]],[bbox[1],bbox[2]],[bbox[3],bbox[0]],[bbox[3],bbox[2]]];return Math.max(...pts.map(([a,o])=>distanceKm(lat,lon,a,o)))*1.08}
 function planetsInNak(index){return activePlanets().filter(p=>nakInfo(p.longitude).index===index)}
 function aspectPairs(){const ps=activePlanets(),aspects=[{deg:0,name:'conjunction'},{deg:60,name:'sextile'},{deg:90,name:'square'},{deg:120,name:'trine'},{deg:180,name:'opposition'}],out=[];for(let i=0;i<ps.length;i++)for(let j=i+1;j<ps.length;j++){const d=angularDiff(ps[i].longitude,ps[j].longitude);const hit=aspects.find(a=>Math.abs(d-a.deg)<=4);if(hit)out.push({a:ps[i],b:ps[j],type:hit.name,orb:Math.min(...aspects.map(x=>Math.abs(d-x.deg)))})}return out}
@@ -278,6 +298,7 @@ function forecastForLocation(area=state.horoscopeArea){
   const signTone=SIGN_TONES[a.sign]||'mixed conditions';
 
   let theme=`${a.sign} / ${a.nak.name} gives this area a ${signTone} field shaped by ${nakData.quality}.`;
+  if(a.gandanta)theme+=` It is inside the ${a.gandanta.core?'core ':'broader '}${a.gandanta.label} Gandanta transition zone.`;
   if(dominant){const st=placementStrength(dominant);theme+=` ${dominant.name} carries the strongest current weight${st.score>1?' from a strong placement':st.score<0?' despite a pressured placement':''}.`}
 
   const manifestations=manifestationPool(a,area);
@@ -292,7 +313,8 @@ function forecastForLocation(area=state.horoscopeArea){
   const bestUse=`Best use: favor ${bestMap[a.sign]||'actions that fit the location’s main theme'} rather than forcing unrelated activity.`;
 
   let caution=`Watch for: ${['Ardra','Ashlesha','Jyeshtha','Mula','Purva Bhadrapada'].includes(a.nak.name)?'intensity, overreaction, or hidden complications':'scattering attention or overinterpreting minor signals'}.`;
-  if(dominant&&placementStrength(dominant).score<=-2)caution=`Watch for: ${dominant.name} is under a weakened dignity condition, so its themes may require extra patience or correction.`;
+  if(a.gandanta)caution=`Watch for: this is a Gandanta transition zone. Build in extra time, verify directions and communications, and avoid rushing irreversible choices.`;
+  else if(dominant&&placementStrength(dominant).score<=-2)caution=`Watch for: ${dominant.name} is under a weakened dignity condition, so its themes may require extra patience or correction.`;
   if(strongestDrishti)caution=`Watch for: ${strongestDrishti.from.name} casts its ${strongestDrishti.type} to ${strongestDrishti.to.name}, strongly modifying the area climate.`;
   else if(strongest&&['square','opposition'].includes(strongest.type))caution=`Watch for: ${strongest.a.name} ${strongest.type} ${strongest.b.name} can create competing pressures around this zone.`;
 
@@ -305,6 +327,7 @@ function forecastForLocation(area=state.horoscopeArea){
     governorRecords[0]?keyPlanetSummary(governorRecords[0],'Transit governor'):null,
     moon?`Moon: ${moon.sign} ${moon.signDegree.toFixed(1)}° · ${moon.nak.name} · Climate House ${moon.climateHouse} · ${placementStrength(moon).dignity.label}`:null,
     lordCompound&&signLordName!==nakLordName?`${signLordName} ↔ ${nakLordName}: ${lordCompound}`:null,
+    a.gandanta?`${a.gandanta.core?'Core':'Broad'} Gandanta · ${a.gandanta.label} · ${a.gandanta.distance.toFixed(2)}° from junction`:null,
     areaEmphasis(a,area)
   ].filter(Boolean);
   if(lordConnection)why.push(`${signLordName} ${lordConnection.type} ${nakLordName} · orb ${lordConnection.orb.toFixed(2)}°`);
@@ -316,6 +339,57 @@ function forecastHTML(area=state.horoscopeArea){
   return `<div class="compact-forecast"><p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>What may show up</span><ul>${f.manifestations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.bestUse)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>Why this forecast?</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`
 }
 
+function zoneRecord(index){
+  const longitude=index*(360/27)+(360/54),sign=signForLongitude(longitude),house=climateHouseForLongitude(longitude),governors=planetsInNak(index),nak={name:NAKSHATRAS[index],lord:NAK_LORDS[index],index};
+  const signLord=planetClimateRecord(SIGN_LORDS[sign.name]),nakLord=planetClimateRecord(nak.lord);
+  const govRecords=governors.map(p=>planetClimateRecord(p.name)).filter(Boolean);
+  const edgeGandanta=['Ashwini','Magha','Mula','Ashlesha','Jyeshtha','Revati'].includes(nak.name);
+  const streetRow=state.streetIndex.find(r=>r.index===index);
+  const strength=[signLord,nakLord,...govRecords].filter(Boolean).reduce((s,r)=>s+Math.abs(classicalInfluenceScore(r)),0);
+  const score=governors.length*3+strength+(edgeGandanta?1.2:0)+Math.min(2,(streetRow?.streetCount||0)/30);
+  return {index,longitude,sign,house,nak,governors,signLord,nakLord,govRecords,edgeGandanta,streetCount:streetRow?.streetCount||0,streets:streetRow?.streets||[],score,bearing:bearingForLongitude(longitude),direction:direction8(bearingForLongitude(longitude))};
+}
+function gandantaStreetSummary(){
+  const core=new Map(),broad=new Map();
+  for(const seg of state.roadNetwork){const g=seg.gandanta||gandantaInfo(seg.longitude);if(!g)continue;const target=g.core?core:broad;const k=g.label;if(!target.has(k))target.set(k,new Set());target.get(k).add(seg.name)}
+  return {core:[...core].map(([label,set])=>({label,streets:[...set].sort()})),broad:[...broad].map(([label,set])=>({label,streets:[...set].sort()}))};
+}
+function cityForecastData(){
+  const zones=NAKSHATRAS.map((_,i)=>zoneRecord(i)).sort((a,b)=>b.score-a.score);
+  const aspects=aspectPairs();
+  const tense=aspects.filter(a=>['square','opposition'].includes(a.type)).sort((a,b)=>a.orb-b.orb);
+  const supportive=aspects.filter(a=>['trine','sextile'].includes(a.type)).sort((a,b)=>a.orb-b.orb);
+  const gstreets=gandantaStreetSummary();
+  const houseActivity=Array.from({length:12},(_,i)=>({house:i+1,planets:activePlanets().filter(p=>climateHouseForLongitude(p.longitude)===i+1),segments:state.roadNetwork.filter(s=>s.house===i+1).length})).sort((a,b)=>(b.planets.length*5+b.segments/50)-(a.planets.length*5+a.segments/50));
+  return {zones,tense,supportive,gstreets,houseActivity};
+}
+function zoneAdvice(z){
+  if(z.edgeGandanta)return `Use this as a transition zone: keep plans flexible, verify timing and directions, and favor review or completion over unnecessary escalation.`;
+  if(z.house===10||z.house===11)return `Good for visible work, coordination, networking, and goal-oriented movement when the local transit governor is supported.`;
+  if(z.house===8||z.house===12)return `Better for research, private work, cleanup, and cautious movement than for forcing quick public outcomes.`;
+  if(z.house===3||z.house===9)return `Useful for movement, errands, communication, learning, and route planning; confirm details before committing.`;
+  return `Match activity to the zone’s house and nakshatra theme; use the strongest governor as the timing modifier rather than treating the area as uniformly good or bad.`;
+}
+function cityForecastDashboard(){
+  const d=cityForecastData(),top=d.zones.slice(0,4),tense=d.tense[0],support=d.supportive[0];
+  const coreCount=d.gstreets.core.reduce((n,x)=>n+x.streets.length,0),broadCount=d.gstreets.broad.reduce((n,x)=>n+x.streets.length,0);
+  return `<section id="cityForecastDashboard" class="panel city-dashboard">
+    <div class="panel-head"><div><span class="eyebrow">CITY FORECAST DASHBOARD</span><h2>${esc(state.cityName)} climate overview</h2></div><div class="dashboard-status">${state.roadNetwork.length?`${state.roadNetworkCount.toLocaleString()} roads indexed`:'Build streets in fullscreen for road-level counts'}</div></div>
+    <div class="dashboard-grid">
+      ${top.map((z,i)=>`<article class="zone-card"><div class="zone-rank">${i+1}</div><div><span>${z.direction} · H${z.house}</span><h3>${z.sign.glyph} ${esc(z.sign.name)} / ${esc(z.nak.name)}</h3><p>${z.governors.length?`Transit governor: ${z.governors.map(g=>`${g.glyph} ${esc(g.name)}`).join(' · ')}`:`Nakshatra lord: ${esc(z.nak.lord)}`}</p><p>${z.streetCount?`${z.streetCount} named streets cross this zone.`:'Street count available after city network build.'}</p><small>${esc(zoneAdvice(z))}</small></div></article>`).join('')}
+    </div>
+    <div class="dashboard-secondary">
+      <div class="dashboard-card"><span>Strongest tense axis</span><b>${tense?`${tense.a.glyph} ${esc(tense.a.name)} ${tense.type} ${tense.b.glyph} ${esc(tense.b.name)}`:'No tight square/opposition in current major-aspect scan'}</b>${tense?`<small>${direction8(bearingForLongitude(tense.a.longitude))} H${climateHouseForLongitude(tense.a.longitude)} ↔ ${direction8(bearingForLongitude(tense.b.longitude))} H${climateHouseForLongitude(tense.b.longitude)} · orb ${tense.orb.toFixed(2)}°</small>`:''}</div>
+      <div class="dashboard-card"><span>Supportive flow</span><b>${support?`${support.a.glyph} ${esc(support.a.name)} ${support.type} ${support.b.glyph} ${esc(support.b.name)}`:'No tight trine/sextile in current major-aspect scan'}</b>${support?`<small>Use sectors touched by this aspect for lower-friction coordination; orb ${support.orb.toFixed(2)}°.</small>`:''}</div>
+      <div class="dashboard-card"><span>Most activated Climate House</span><b>H${d.houseActivity[0]?.house||'—'}${d.houseActivity[0]?.planets?.length?` · ${d.houseActivity[0].planets.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · ')}`:''}</b><small>${d.houseActivity[0]?.segments?`${d.houseActivity[0].segments} classified street segments currently fall in this house.`:'Street-segment count available after network build.'}</small></div>
+      <div class="dashboard-card gandanta-card"><span>Gandanta transitions</span><b>${coreCount} core street names · ${broadCount} broader-band street names</b><small>Core = ±0°48′ around the water→fire junction. Broad transition band = ±3°20′. These are sensitivity flags, not automatic negative outcomes.</small></div>
+    </div>
+    <details class="gandanta-details"><summary>Gandanta zones & practical advice</summary>
+      <div class="gandanta-grid">${GANDANTA_JUNCTIONS.map(j=>{const core=d.gstreets.core.find(x=>x.label===j.label),broad=d.gstreets.broad.find(x=>x.label===j.label);const names=[...(core?.streets||[]),...(broad?.streets||[])].filter((x,i,a)=>a.indexOf(x)===i).slice(0,12);return `<div><b>${esc(j.label)}</b><span>${esc(j.waterSign)} → ${esc(j.fireSign)}</span><p>${esc(gandantaAdvice({core:true,label:j.label}))}</p><small>${names.length?`Indexed streets: ${names.map(esc).join(' · ')}`:'Build the street network to list roads crossing this junction.'}</small></div>`}).join('')}</div>
+    </details>
+  </section>`;
+}
+function updateCityDashboardPanel(){const el=document.querySelector('#cityForecastDashboard');if(!el)return;const fresh=cityForecastDashboard();const box=document.createElement('div');box.innerHTML=fresh;const next=box.firstElementChild;if(next)el.replaceWith(next)}
 function cityBBox(){
   const lat=+state.cityLatitude,lon=+state.cityLongitude,r=cityRadiusKm();
   const dLat=r/111.32,dLon=r/(111.32*Math.max(.25,Math.cos(lat*Math.PI/180)));
@@ -348,7 +422,7 @@ function classifyRoadWay(way){
     const a=geom[i],b=geom[i+1],lat=(a.lat+b.lat)/2,lon=(a.lon+b.lon)/2;
     if(distanceKm(+state.cityLatitude,+state.cityLongitude,lat,lon)>cityRadiusKm()*1.08){flush();continue}
     const info=analyzeMapPoint(lat,lon),key=`${info.nak.index}|${info.climateHouse}|${info.sign}`;
-    if(!run||run.key!==key){flush();run={key,nakIndex:info.nak.index,nakshatra:info.nak.name,sign:info.sign,signGlyph:SIGN_GLYPHS[SIGNS.indexOf(info.sign)],house:info.climateHouse,coords:[[a.lat,a.lon],[b.lat,b.lon]],name,highway:way.tags.highway||'',osmId:way.id}}
+    if(!run||run.key!==key){flush();run={key,nakIndex:info.nak.index,nakshatra:info.nak.name,sign:info.sign,signGlyph:SIGN_GLYPHS[SIGNS.indexOf(info.sign)],house:info.climateHouse,longitude:info.zodiacLon,gandanta:gandantaInfo(info.zodiacLon),coords:[[a.lat,a.lon],[b.lat,b.lon]],name,highway:way.tags.highway||'',osmId:way.id}}
     else run.coords.push([b.lat,b.lon]);
   }
   flush();return out;
@@ -360,7 +434,7 @@ function buildStreetIndexFromNetwork(){
   rows.forEach((r,i)=>{const names=[...sets[i]].sort((a,b)=>a.localeCompare(b));r.streetCount=names.length;r.streets=names});
   state.streetIndex=rows;
 }
-function reclassifyRoadNetwork(){const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));state.roadNetwork=segments;buildStreetIndexFromNetwork();drawRoadNetworkLayer()}
+function reclassifyRoadNetwork(){const segments=[];for(const way of state.roadWays)segments.push(...classifyRoadWay(way));state.roadNetwork=segments;buildStreetIndexFromNetwork();drawRoadNetworkLayer();updateCityDashboardPanel()}
 function clearRoadNetworkLayer(){if(state.roadNetworkLayer&&state.map){try{state.roadNetworkLayer.remove()}catch{}}state.roadNetworkLayer=null}
 function drawRoadNetworkLayer(){
   clearRoadNetworkLayer();if(!state.map||!state.roadNetwork.length)return;
@@ -384,12 +458,12 @@ async function buildCityRoadNetwork(force=false){
   state.roadNetwork=segments;state.roadNetworkCount=byId.size;state.roadNetworkLoading=false;state.streetIndexLoading=false;
   buildStreetIndexFromNetwork();drawRoadNetworkLayer();
   state.roadNetworkStatus=`Indexed ${byId.size.toLocaleString()} named road ways into ${segments.length.toLocaleString()} astrological street sectors${failures?` · ${failures} map section${failures===1?'':'s'} unavailable`:''}.`;
-  state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();
+  state.streetIndexStatus=state.roadNetworkStatus;updateStreetIndexPanel();updateCityDashboardPanel();
 }
 function streetIndexHTML(){
   if(state.roadNetworkLoading)return `<div class="street-index-empty">${esc(state.roadNetworkStatus||'Loading city street network…')}</div>`;
   if(!state.streetIndex.length)return `<div class="street-index-empty"><b>City street network not loaded.</b><br>Use “Build street network” to classify named OpenStreetMap roads across the fixed city wheel.</div>`;
-  return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);const shown=row.streets.slice(0,14),more=Math.max(0,row.streetCount-shown.length);return `<div class="street-index-row"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
+  return state.streetIndex.map(row=>{const gov=planetsInNak(row.index);const house=climateHouseForLongitude(row.longitude);const shown=row.streets.slice(0,14),more=Math.max(0,row.streetCount-shown.length);const g=['Ashwini','Magha','Mula','Ashlesha','Jyeshtha','Revati'].includes(row.nakshatra);return `<div class="street-index-row ${g?'gandanta-row':''}"><div class="street-index-color" style="background:${nakColor(row.index,.95)}"></div><div class="street-index-copy"><div class="street-index-head"><b>${row.signGlyph} ${esc(row.sign)} · H${house}</b><span>${esc(row.nakshatra)}${g?' · Gandanta edge':''}</span></div><div class="street-index-governors">${gov.length?gov.map(p=>`${p.glyph} ${esc(p.name)}`).join(' · '):`Traditional lord: ${esc(NAK_LORDS[row.index])}`}</div><div class="street-index-streets">${shown.length?shown.map(esc).join(' · '):'No named streets indexed'}${more?` <em>+${more} more</em>`:''}</div></div></div>`}).join('');
 }
 function extractRoadNames(data){
   const features=data?.features||[];
@@ -432,7 +506,7 @@ function analyzeMapPoint(lat,lon){
   const radiusKm=cityRadiusKm();
   const climateHouse=climateHouseForLongitude(zodiacLon);
   const governors=planetsInNak(nak.index);
-  return {lat:+lat,lon:+lon,bearing,zodiacLon,nak,sign:SIGNS[signIndex],signDegree,nearest,distanceKm:distance,radiusKm,insideRadius:distance<=radiusKm,climateHouse,governors};
+  return {lat:+lat,lon:+lon,bearing,zodiacLon,nak,sign:SIGNS[signIndex],signDegree,nearest,distanceKm:distance,radiusKm,insideRadius:distance<=radiusKm,climateHouse,governors,gandanta:gandantaInfo(zodiacLon)};
 }
 function locationAnalysisCard(){
   const a=state.selectedMapPoint;if(!a)return `<div class="empty-state">Move or click the blue location dot to inspect its climate house, zodiac, nakshatra and current transit governors.</div>`;
@@ -531,6 +605,7 @@ function wheel(){
   const hues=[8,31,56,108,145,174,201,229,255,278,309,338];
   SIGNS.forEach((n,i)=>{const st=i*30+rot,en=st+30,mid=st+15,[x,y]=point(cx,cy,286,mid);s+=`<path d="${arcPath(cx,cy,248,325,st,en)}" fill="hsl(${hues[i]} 74% 48% / .29)" stroke="#d7dcf2" stroke-opacity=".10"/><text x="${x}" y="${y-7}" text-anchor="middle" class="sign-glyph">${SIGN_GLYPHS[i]}</text><text x="${x}" y="${y+18}" text-anchor="middle" class="sign-name">${n}</text>`});
   NAKSHATRAS.forEach((n,i)=>{const st=i*(360/27)+rot,en=st+360/27,hue=nakHue(i),mid=(st+en)/2,gov=planetsInNak(i);s+=`<path d="${arcPath(cx,cy,164,246,st,en)}" fill="hsl(${hue} 56% 38% / ${gov.length?'.38':(i%2?'.24':'.20')})" stroke="#d6dcf5" stroke-opacity=".19" stroke-width=".8"/>`;s+=radialLabel(n,cx,cy,236,mid);if(gov.length){const [gx,gy]=point(cx,cy,210,mid);s+=`<g class="nak-governors" transform="translate(${gx} ${gy})"><rect x="-${Math.max(12,gov.length*10)}" y="-10" width="${Math.max(24,gov.length*20)}" height="20" rx="10" fill="#080b12" fill-opacity=".76" stroke="${nakColor(i,.92)}" stroke-width="1"/>${gov.map((p,k)=>`<text x="${(k-(gov.length-1)/2)*17}" y="6" text-anchor="middle" class="governor-glyph" style="fill:${nakColor(i,.98)}">${p.glyph}</text>`).join('')}</g>`}});
+  GANDANTA_JUNCTIONS.forEach(j=>{const a=j.boundary+rot,p1=point(cx,cy,150,a),p2=point(cx,cy,326,a),[gx,gy]=point(cx,cy,252,a);s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" class="gandanta-boundary"/><text x="${gx}" y="${gy+4}" text-anchor="middle" class="gandanta-glyph">G</text>`});
   for(let i=0;i<108;i++){const a=i*(360/108)+rot,p1=point(cx,cy,154,a),p2=point(cx,cy,i%4===0?164:160,a);s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" stroke="#d9def0" stroke-opacity="${i%4===0?'.32':'.13'}" stroke-width="${i%4===0?'.8':'.42'}"/>`}
   for(let i=0;i<12;i++){const a=i*30+90,p1=point(cx,cy,80,a),p2=point(cx,cy,164,a),[hx,hy]=point(cx,cy,108,a+15);s+=`<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" stroke="#dfe6ff" stroke-opacity=".48" stroke-width="1.2"/><text x="${hx}" y="${hy+5}" text-anchor="middle" class="house-number">H${i+1}</text>`}
   s+=`<circle cx="350" cy="350" r="162" fill="#080a10" fill-opacity=".15" stroke="#8d98bd" stroke-opacity=".24"/><circle cx="350" cy="350" r="78" fill="#111827" fill-opacity=".13" stroke="#aab5d9" stroke-opacity=".22"/><circle cx="350" cy="350" r="5" fill="#ffd166" filter="url(#softGlow)"/>`;
@@ -557,6 +632,7 @@ function selectedPointSummary(){
     <div><span>Climate house</span><b>H${a.climateHouse}</b></div>
     <div><span>Zodiac</span><b>${esc(a.sign)} ${a.signDegree.toFixed(2)}°</b></div>
     <div><span>Nakshatra</span><b>${esc(a.nak.name)} · P${a.nak.pada}</b></div>
+    <div><span>Gandanta</span><b>${a.gandanta?(a.gandanta.core?'Core · ':'Transition · ')+esc(a.gandanta.label):'No'}</b></div>
     <div><span>Sign lord</span><b>${esc(SIGN_LORDS[a.sign])}</b></div><div><span>Nakshatra lord</span><b>${esc(a.nak.lord)}</b></div>
     <div class="wide"><span>Transit governor</span><b>${gov}</b></div>
   </div>`;
@@ -588,7 +664,6 @@ function climateView(){
       <div class="panel compact-module">
         <span class="eyebrow">VIEW</span>
         <label>Mode<select id="scale">${['City','Neighborhood','Street'].map(x=>`<option ${x===state.scale?'selected':''}>${x}</option>`).join('')}</select></label>
-        <button id="fullscreenMap" class="action secondary">⛶ Fullscreen map</button>
       </div>
       <div class="panel compact-module">
         <span class="eyebrow">ASTROLOGY</span>
@@ -605,10 +680,12 @@ function climateView(){
       ${state.maptilerKey?'':`<div class="panel compact-module"><span class="eyebrow">MAP SEARCH</span><div class="notice">Add your MapTiler key under Settings to enable place search and the street index.</div></div>`}
     </section>
     <section class="panel wheel-panel primary-map-panel">
+      <div class="map-toolbar persistent-map-toolbar"><button id="fullscreenMap" class="action secondary compact">⛶ Fullscreen map</button></div>
       <div id="mapFullscreenShell" class="fullscreen-shell"><aside class="fullscreen-street-index"><div class="street-index-title"><div><span class="eyebrow">NAKSHATRA STREET INDEX</span><b>Zodiac · Nakshatra · Transit governors · Streets</b></div><div class="street-index-actions"><button id="buildRoadNetwork" class="mini-button wide" title="Build city street network">Build streets</button><button id="refreshStreetIndex" class="mini-button" title="Refresh streets">↻</button></div></div><div id="streetIndexStatus" class="street-index-status">${esc(state.streetIndexStatus||'')}</div><div id="streetIndexBody" class="street-index-body">${streetIndexHTML()}</div></aside><div class="map-wheel-stage"><div id="climateMap" class="climate-map" aria-label="Personal Climate map"></div><button id="exitFullscreenMap" class="fullscreen-exit" title="Exit fullscreen">×</button></div></div>
       <div class="map-caption"><span>${esc(state.cityName)} fixed wheel</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span><span>${state.roadNetworkCount?`${state.roadNetworkCount.toLocaleString()} named roads indexed`:'street network not indexed'}</span></div>
     </section>
   </div>
+  ${cityForecastDashboard()}
   ${locationHoroscopePanel()}`;
 }
 
