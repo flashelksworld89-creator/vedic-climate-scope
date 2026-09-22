@@ -1,5 +1,3 @@
-import SwissEph from 'https://cdn.jsdelivr.net/gh/prolaxu/swisseph-wasm@v0.1.0/src/swisseph.js';
-
 const SIGNS=['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
 const SIGN_GLYPHS=['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];
 const PLANETS=[['Sun','☉'],['Moon','☽'],['Mercury','☿'],['Venus','♀'],['Mars','♂'],['Jupiter','♃'],['Saturn','♄'],['Rahu','☊'],['Ketu','☋'],['Uranus','♅'],['Neptune','♆'],['Pluto','♇']];
@@ -11,11 +9,14 @@ const now=new Date();
 const DEFAULT_LAT=36.17, DEFAULT_LON=-115.14;
 const defaultTimeZone=lookupTimeZone(DEFAULT_LAT,DEFAULT_LON);
 const defaultLocalDateTime=toZonedInput(now,defaultTimeZone);
-let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapZoom:11,maptilerKey:localStorage.getItem('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,mapKeyTest:''};
+let state={tab:'climate',scale:'City',selectedPlanet:'Mercury',selectedHouse:1,profile:loadProfile(),engineStatus:'loading',engineMessage:'Loading Swiss Ephemeris…',swe:null,transit:null,latitude:DEFAULT_LAT,longitude:DEFAULT_LON,timeZone:defaultTimeZone,localDateTime:defaultLocalDateTime,useLiveAsc:true,map:null,mapMarker:null,mapPointMarker:null,mapZoom:11,maptilerKey:safeGet('maptilerKey')||'',searchResults:[],searchStatus:'',selectedMapPoint:null,streetIndex:[],streetIndexStatus:'',streetIndexLoading:false,mapKeyTest:''};
 const SCALE_CONFIG={World:{zoom:2,radiusKm:12000},Country:{zoom:5,radiusKm:1200},State:{zoom:7,radiusKm:320},City:{zoom:11,radiusKm:35},Neighborhood:{zoom:15,radiusKm:3.2},Street:{zoom:18,radiusKm:0.35}};
 
-function loadProfile(){try{return JSON.parse(localStorage.getItem('vedicProfile'))||structuredClone(DEFAULT_PROFILE)}catch{return structuredClone(DEFAULT_PROFILE)}}
-function save(){localStorage.setItem('vedicProfile',JSON.stringify(state.profile))}
+function cloneDefaultProfile(){return JSON.parse(JSON.stringify(DEFAULT_PROFILE))}
+function safeGet(key){try{return localStorage.getItem(key)}catch{return null}}
+function safeSet(key,value){try{localStorage.setItem(key,value)}catch{}}
+function loadProfile(){try{return JSON.parse(safeGet('vedicProfile'))||cloneDefaultProfile()}catch{return cloneDefaultProfile()}}
+function save(){safeSet('vedicProfile',JSON.stringify(state.profile))}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function norm(x){return ((x%360)+360)%360}
 function lookupTimeZone(lat,lon){try{return window.tzlookup?window.tzlookup(+lat,+lon):(Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC')}catch{return Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'}}
@@ -129,7 +130,7 @@ async function searchPlace(){
   const q=(document.querySelector('#placeSearch')?.value||'').trim();
   if(!key){state.searchStatus='Add your MapTiler key in Settings first.';render();return}
   if(!q){state.searchStatus='Enter a city, street, neighborhood or address.';render();return}
-  state.maptilerKey=key;localStorage.setItem('maptilerKey',key);state.searchStatus='Searching…';state.searchResults=[];render();
+  state.maptilerKey=key;safeSet('maptilerKey',key);state.searchStatus='Searching…';state.searchResults=[];render();
   try{
     const url=`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?limit=6&autocomplete=false&key=${encodeURIComponent(key)}`;
     const r=await fetch(url);if(!r.ok)throw new Error(r.status===403?'API key rejected or restricted for this site.':`Search failed (${r.status})`);
@@ -148,6 +149,10 @@ function selectSearchResult(i){
 
 async function initEngine(){
   try{
+    state.engineStatus='loading';state.engineMessage='Loading Swiss Ephemeris…';
+    const mod=await import('https://cdn.jsdelivr.net/gh/prolaxu/swisseph-wasm@v0.1.0/src/swisseph.js');
+    const SwissEph=mod.default;
+    if(!SwissEph)throw new Error('Swiss Ephemeris module did not provide a default export');
     const swe=new SwissEph();
     await swe.initSwissEph();
     swe.set_sid_mode(swe.SE_SIDM_LAHIRI,0,0);
@@ -252,7 +257,32 @@ async function testMapKey(){
   render();
 }
 
-function settingsView(){return `<div class="grid two"><section class="panel"><span class="eyebrow">CALCULATION SPECIFICATION</span><h2>Current rules</h2><div class="settings-grid"><div><span>Zodiac</span><b>Sidereal</b></div><div><span>Ayanamsa</span><b>Lahiri</b></div><div><span>Nodes</span><b>Mean Rahu/Ketu</b></div><div><span>Houses</span><b>Whole Sign</b></div><div><span>Outer planets</span><b>Uranus · Neptune · Pluto</b></div><div><span>Wheel orientation</span><b>ASC East · DSC West</b></div></div></section><section class="panel"><span class="eyebrow">MAP SETTINGS</span><h2>Map key</h2>${state.maptilerKey?`<div class="status-line"><b>Map key saved in this browser.</b></div><button id="testMapKey" class="action primary">Test key on this deployment</button><button id="changeMapKey" class="action secondary">Replace saved key</button>`:`<label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste MapTiler key"></label><button id="saveMapKey" class="action primary">Save map key</button>`}${state.mapKeyTest?`<div class="status-line">${esc(state.mapKeyTest)}</div>`:''}<div class="status-line">Allowed HTTP Origin hostname:<br><b>${esc(window.location.host)}</b></div><p>Add this exact hostname to MapTiler Allowed HTTP Origins. If you use a stable production domain, allow that instead of a one-off hashed deployment hostname.</p></section></div>`}<div class="status-line">Allowed HTTP Origin for this deployment:<br><b>${esc(window.location.host)}</b></div><p>For a key restricted by origin, MapTiler must allow the exact hostname you are currently using. A stable Vercel production domain is better than a one-off deployment URL.</p></section></div>`}
+function settingsView(){
+  return `<div class="grid two">
+    <section class="panel">
+      <span class="eyebrow">CALCULATION SPECIFICATION</span>
+      <h2>Current rules</h2>
+      <div class="settings-grid">
+        <div><span>Zodiac</span><b>Sidereal</b></div>
+        <div><span>Ayanamsa</span><b>Lahiri</b></div>
+        <div><span>Nodes</span><b>Mean Rahu/Ketu</b></div>
+        <div><span>Houses</span><b>Whole Sign</b></div>
+        <div><span>Outer planets</span><b>Uranus · Neptune · Pluto</b></div>
+        <div><span>Wheel orientation</span><b>ASC East · DSC West</b></div>
+      </div>
+    </section>
+    <section class="panel">
+      <span class="eyebrow">MAP SETTINGS</span>
+      <h2>Map key</h2>
+      ${state.maptilerKey
+        ? `<div class="status-line"><b>Map key saved in this browser.</b></div><button id="testMapKey" class="action primary">Test key on this deployment</button><button id="changeMapKey" class="action secondary">Replace saved key</button>`
+        : `<label>MapTiler API key<input id="maptilerKey" type="password" autocomplete="off" placeholder="Paste MapTiler key"></label><button id="saveMapKey" class="action primary">Save map key</button>`}
+      ${state.mapKeyTest?`<div class="status-line">${esc(state.mapKeyTest)}</div>`:''}
+      <div class="status-line">Allowed HTTP Origin hostname:<br><b>${esc(window.location.host)}</b></div>
+      <p>Add this exact hostname to MapTiler Allowed HTTP Origins. A stable production domain is better than a one-off deployment hostname.</p>
+    </section>
+  </div>`;
+}
 
 function initClimateMap(){
   if(state.tab!=='climate'||!window.L)return;
@@ -291,7 +321,7 @@ function render(){document.querySelector('#app').innerHTML=`<div class="app-shel
 
 function bind(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;render()});
-  const reset=document.querySelector('#reset');if(reset)reset.onclick=()=>{state.profile=structuredClone(DEFAULT_PROFILE);save();render()};
+  const reset=document.querySelector('#reset');if(reset)reset.onclick=()=>{state.profile=cloneDefaultProfile();save();render()};
   document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{state.profile.mode=b.dataset.mode;save();render()});
   document.querySelectorAll('[data-planet]').forEach(b=>b.onclick=()=>{state.selectedPlanet=b.dataset.planet;render()});
   document.querySelectorAll('[data-house]').forEach(b=>b.onclick=()=>{state.selectedHouse=+b.dataset.house;render()});
@@ -321,5 +351,5 @@ function bind(){
   document.querySelectorAll('[data-remove-house]').forEach(b=>b.onclick=()=>{state.profile.houseRoles[state.selectedHouse].splice(+b.dataset.removeHouse,1);save();render()});
 }
 
-render();
+try{render()}catch(err){console.error('Initial render failed',err);const root=document.querySelector('#app');if(root)root.innerHTML=`<main style="padding:24px;font-family:Arial,sans-serif;color:#fff;background:#0b0e17;min-height:100vh"><h1>Vedic Climate Scope</h1><p>The interface hit a browser startup error.</p><pre style="white-space:pre-wrap;color:#ffb4b4">${esc(err?.message||err)}</pre></main>`}
 initEngine();
