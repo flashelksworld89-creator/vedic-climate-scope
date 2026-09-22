@@ -1,37 +1,21 @@
-# Vedic Climate Scope — Static Version
+# Vedic Climate Scope v1.2
 
-This build intentionally avoids Vite, React, npm, bundlers, and front-end API keys.
+Static HTML/CSS/JavaScript. No Vite and no paid API key.
 
-## Run locally
-Open `index.html` directly in a browser.
+## New in v1.2
+- Center wording removed from the wheel.
+- Swiss Ephemeris WebAssembly loaded directly in the browser.
+- Lahiri sidereal planetary longitudes.
+- Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Rahu, Ketu, Uranus, Neptune and Pluto.
+- Mean node for Rahu; Ketu calculated 180 degrees opposite.
+- Live Ascendant from UTC time + latitude + longitude, converted to Lahiri sidereal longitude.
+- Whole Sign house framework.
+- Manual Ascendant remains available and can be selected instead of live ASC.
+- 27 curved nakshatra wedges and 108 pada divisions remain.
+- Device geolocation button uses browser geolocation and requires no API key.
 
-## Deploy
-Upload these three files to GitHub or Vercel as a static site:
-- `index.html`
-- `styles.css`
-- `app.js`
+## Deployment
+Upload all files to the existing GitHub repository and commit. Vercel should redeploy automatically. Framework preset remains Other; no build command and no environment variables are required.
 
-No build command is required.
-
-## Current features
-- Personal Climate wheel
-- 12 zodiac signs and 27 nakshatras
-- ASC fixed to East / DSC to West
-- Manual Ascendant sign, degree, minute, second
-- Planet role personalization
-- House meaning personalization
-- Automatic / Manual / Quick Reading profile modes
-- Daily horoscope life-area interface
-- Scale selector from World to Street
-- Browser localStorage profile saving
-
-## Planned calculation architecture
-Astronomical calculations should run from a local/server-side Swiss Ephemeris layer rather than a paid external astrology API. Mapping can use open map data so no Google Maps API key is required.
-
-
-## V1.1 Wheel update
-- Nakshatra names are laid along radial wedge arcs rather than straight horizontal labels.
-- The zodiac and nakshatra rings are semi-transparent for eventual map overlay.
-- Added 108 pada tick marks.
-- Added a temporary map-style underlay so wheel translucency can be evaluated before real mapping is connected.
-- Live planetary positions are still demo values until the sidereal ephemeris engine is added.
+## Important
+This version takes date/time in UTC. Address search, city centroid calculation, automatic time-zone resolution and the real geographic map overlay are planned for the next stage.
