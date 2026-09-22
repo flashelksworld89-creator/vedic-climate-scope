@@ -61,10 +61,29 @@ function climateHouseForLongitude(lon){return Math.floor(norm(lon-activeAsc())/3
 function cityRadiusFromBBox(bbox,lat,lon){if(!bbox||bbox.length<4)return 38;const pts=[[bbox[1],bbox[0]],[bbox[1],bbox[2]],[bbox[3],bbox[0]],[bbox[3],bbox[2]]];return Math.max(...pts.map(([a,o])=>distanceKm(lat,lon,a,o)))*1.08}
 function planetsInNak(index){return activePlanets().filter(p=>nakInfo(p.longitude).index===index)}
 function aspectPairs(){const ps=activePlanets(),aspects=[{deg:0,name:'conjunction'},{deg:60,name:'sextile'},{deg:90,name:'square'},{deg:120,name:'trine'},{deg:180,name:'opposition'}],out=[];for(let i=0;i<ps.length;i++)for(let j=i+1;j<ps.length;j++){const d=angularDiff(ps[i].longitude,ps[j].longitude);const hit=aspects.find(a=>Math.abs(d-a.deg)<=4);if(hit)out.push({a:ps[i],b:ps[j],type:hit.name,orb:Math.min(...aspects.map(x=>Math.abs(d-x.deg)))})}return out}
+function directedArc(from,to){return norm(to-from)}
+function vedicAspectAngles(name){
+  const base=[{deg:180,name:'7th aspect'}];
+  if(name==='Mars')return [...base,{deg:90,name:'4th aspect'},{deg:210,name:'8th aspect'}];
+  if(name==='Jupiter')return [...base,{deg:120,name:'5th aspect'},{deg:240,name:'9th aspect'}];
+  if(name==='Saturn')return [...base,{deg:60,name:'3rd aspect'},{deg:270,name:'10th aspect'}];
+  return base
+}
+function vedicDrishtiForPlanet(name,orb=5){
+  const source=planetByName(name);if(!source)return {casts:[],receives:[]};
+  const ps=activePlanets(),casts=[],receives=[];
+  for(const target of ps){
+    if(target.name===name)continue;
+    for(const asp of vedicAspectAngles(name)){const d=directedArc(source.longitude,target.longitude),o=Math.abs(d-asp.deg);if(o<=orb)casts.push({from:source,to:target,type:asp.name,orb:o})}
+    for(const asp of vedicAspectAngles(target.name)){const d=directedArc(target.longitude,source.longitude),o=Math.abs(d-asp.deg);if(o<=orb)receives.push({from:target,to:source,type:asp.name,orb:o})}
+  }
+  return {casts:casts.sort((a,b)=>a.orb-b.orb),receives:receives.sort((a,b)=>a.orb-b.orb)}
+}
 
 const HOUSE_THEMES={
 1:['self-direction','initiative','identity'],2:['money-values','resources','speech'],3:['communication','short travel','neighbors'],4:['home-family','roots','emotional security'],5:['creativity-romance','children','speculation'],6:['work-routines','service','obstacles'],7:['relationships-partnerships','agreements','other people'],8:['shared resources','private matters','change'],9:['long travel','beliefs','higher learning'],10:['career-public life','responsibility','status'],11:['income-gains','networks','goals'],12:['retreat-expenses','foreign places','closure']
 };
+const SIGN_LORDS={Aries:'Mars',Taurus:'Venus',Gemini:'Mercury',Cancer:'Moon',Leo:'Sun',Virgo:'Mercury',Libra:'Venus',Scorpio:'Mars',Sagittarius:'Jupiter',Capricorn:'Saturn',Aquarius:'Saturn',Pisces:'Jupiter'};
 const SIGN_TONES={Aries:'direct and fast-moving',Taurus:'steady and practical',Gemini:'mobile and information-heavy',Cancer:'protective and emotionally responsive',Leo:'visible and expressive',Virgo:'analytical and detail-focused',Libra:'relational and balance-seeking',Scorpio:'private and intense',Sagittarius:'expansive and exploratory',Capricorn:'structured and duty-focused',Aquarius:'social and unconventional',Pisces:'reflective and porous'};
 const NAK_TONES={Ashwini:'quick starts and recovery',Bharani:'pressure, limits, and decisive choices',Krittika:'sorting, cutting away, and clarity',Rohini:'growth, comfort, and attraction',Mrigashira:'searching, movement, and curiosity',Ardra:'disruption, intensity, and clearing',Punarvasu:'return, repair, and renewal',Pushya:'support, nourishment, and responsibility',Ashlesha:'strategy, entanglement, and subtle motives',Magha:'authority, ancestry, and status','Purva Phalguni':'pleasure, creativity, and social ease','Uttara Phalguni':'agreements, support, and durable commitments',Hasta:'skill, handling, and practical control',Chitra:'design, refinement, and visible results',Swati:'independence, movement, and negotiation',Vishakha:'focus, ambition, and competing goals',Anuradha:'alliances, persistence, and loyalty',Jyeshtha:'seniority, protection, and high-pressure decisions',Mula:'root causes, removal, and deep change','Purva Ashadha':'advocacy, momentum, and conviction','Uttara Ashadha':'endurance, responsibility, and lasting outcomes',Shravana:'listening, learning, and information flow',Dhanishta:'resources, rhythm, and group activity',Shatabhisha:'distance, systems, and problem-solving','Purva Bhadrapada':'intensity, ideals, and sharp transitions','Uttara Bhadrapada':'stability, depth, and long-range perspective',Revati:'completion, guidance, and safe passage'};
 const AREA_RULES={
@@ -80,18 +99,37 @@ const AREA_RULES={
 function bhavatBhavamHouse(h){return ((h+h-2)%12)+1}
 function uniquePhrases(items){const seen=new Set();return items.filter(x=>{const k=String(x).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(!k||seen.has(k))return false;seen.add(k);return true})}
 function planetByName(name){return activePlanets().find(p=>p.name===name)}
-function relevantCustomRoles(a,area){
-  const out=[]; const governors=a.governors||[];
-  for(const p of governors){for(const role of state.profile.planetRoles?.[p.name]||[])out.push(`${p.name}: ${role}`)}
-  const lord=planetByName(a.nak.lord); if(lord){for(const role of state.profile.planetRoles?.[lord.name]||[])out.push(`${lord.name}: ${role}`)}
-  for(const role of state.profile.houseRoles?.[a.climateHouse]||[])out.push(`H${a.climateHouse}: ${role}`);
-  const focus=AREA_RULES[area]?.houses||[]; for(const h of focus){for(const role of state.profile.houseRoles?.[h]||[])out.push(`H${h}: ${role}`)}
-  return uniquePhrases(out).slice(0,2)
+function aspectsForPlanet(name){
+  return aspectPairs().filter(x=>x.a.name===name||x.b.name===name).sort((a,b)=>a.orb-b.orb)
 }
-function strongestRelevantAspect(a){
-  const names=new Set((a.governors||[]).map(p=>p.name)); names.add(a.nak.lord);
-  const hits=aspectPairs().filter(x=>names.has(x.a.name)||names.has(x.b.name)).sort((x,y)=>x.orb-y.orb);
-  return hits[0]||null
+function planetClimateRecord(name){
+  const p=planetByName(name); if(!p)return null;
+  const sign=signForLongitude(p.longitude),nak=nakInfo(p.longitude),house=climateHouseForLongitude(p.longitude);
+  return {...p,sign:sign.name,signDegree:sign.degree,nak,climateHouse:house,aspects:aspectsForPlanet(name),drishti:vedicDrishtiForPlanet(name)}
+}
+function strongestAspectForNames(names){
+  const set=new Set(names.filter(Boolean));
+  return aspectPairs().filter(x=>set.has(x.a.name)||set.has(x.b.name)).sort((x,y)=>x.orb-y.orb)[0]||null
+}
+function relationshipBetween(a,b){
+  if(!a||!b||a===b)return null;
+  const hit=aspectPairs().find(x=>(x.a.name===a&&x.b.name===b)||(x.a.name===b&&x.b.name===a));
+  return hit||null
+}
+function strongestVedicDrishti(names){
+  const wanted=new Set(names.filter(Boolean)),hits=[];
+  for(const name of wanted){const d=vedicDrishtiForPlanet(name);hits.push(...d.casts.filter(x=>wanted.has(x.from.name)||wanted.has(x.to.name)),...d.receives.filter(x=>wanted.has(x.from.name)||wanted.has(x.to.name)))}
+  const uniq=[];const seen=new Set();
+  for(const h of hits.sort((a,b)=>a.orb-b.orb)){const k=`${h.from.name}|${h.to.name}|${h.type}`;if(!seen.has(k)){seen.add(k);uniq.push(h)}}
+  return uniq[0]||null
+}
+function keyPlanetSummary(rec,label){
+  if(!rec)return null;
+  const cast=rec.drishti?.casts?.[0],received=rec.drishti?.receives?.[0];
+  let tail='';
+  if(cast)tail+=` · casts ${cast.type} to ${cast.to.name}`;
+  if(received)tail+=` · receives ${received.type} from ${received.from.name}`;
+  return `${label}: ${rec.name} in ${rec.sign} ${rec.signDegree.toFixed(1)}° · ${rec.nak.name} · Climate House ${rec.climateHouse}${rec.retrograde?' ℞':''}${tail}`
 }
 function areaEmphasis(a,area){
   const rule=AREA_RULES[area]||AREA_RULES.Overview, focus=rule.houses;
@@ -116,19 +154,55 @@ function manifestationPool(a,area){
 function forecastForLocation(area=state.horoscopeArea){
   const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
   if(!a)return null;
-  const governors=a.governors||[], governorText=governors.length?governors.map(p=>p.name).join(' and '):a.nak.lord;
-  const tone=NAK_TONES[a.nak.name]||'changing conditions', signTone=SIGN_TONES[a.sign]||'mixed conditions';
-  const asp=strongestRelevantAspect(a); const roles=relevantCustomRoles(a,area); const derived=bhavatBhavamHouse(a.climateHouse);
-  let theme=`${a.nak.name} in Climate House ${a.climateHouse} gives this location a ${signTone} tone, emphasizing ${tone}.`;
-  if(governors.length)theme+=` ${governorText} currently governs the active nakshatra zone.`;
+  const signLordName=SIGN_LORDS[a.sign];
+  const nakLordName=a.nak.lord;
+  const governors=a.governors||[];
+  const signLord=planetClimateRecord(signLordName);
+  const nakLord=planetClimateRecord(nakLordName);
+  const governorRecords=governors.map(g=>planetClimateRecord(g.name)).filter(Boolean);
+  const moon=planetClimateRecord('Moon');
+  const derived=bhavatBhavamHouse(a.climateHouse);
+  const relevantNames=uniquePhrases([signLordName,nakLordName,...governors.map(g=>g.name),'Moon']);
+  const strongest=strongestAspectForNames(relevantNames);
+  const strongestDrishti=strongestVedicDrishti(relevantNames);
+  const lordConnection=relationshipBetween(signLordName,nakLordName);
+  const tone=NAK_TONES[a.nak.name]||'changing conditions';
+  const signTone=SIGN_TONES[a.sign]||'mixed conditions';
+
+  // Rank the local factors so the visible forecast stays short.
+  const activator=governorRecords[0]||nakLord||signLord;
+  let theme=`${a.sign} / ${a.nak.name} gives this area a ${signTone} climate centered on ${tone}.`;
+  if(activator)theme+=` ${activator.name} is the strongest immediate activator in this reading.`;
+
   const manifestations=manifestationPool(a,area);
+  if(signLord&&nakLord&&signLord.name!==nakLord.name){
+    if(lordConnection&&['square','opposition'].includes(lordConnection.type))manifestations.unshift(`${signLord.name} and ${nakLord.name} are under competing pressure, so local conditions may require adjustment rather than a straight path.`);
+    else if(lordConnection)manifestations.unshift(`${signLord.name} and ${nakLord.name} are directly connected by ${lordConnection.type}, tying the sign and nakshatra themes together.`);
+  }
+  const compactManifestations=uniquePhrases(manifestations).slice(0,3);
+
   const bestUse=`Best use: favor ${a.sign==='Virgo'?'planning, sorting, and careful execution':a.sign==='Taurus'?'steady practical action':a.sign==='Gemini'?'communication, comparison, and flexible movement':a.sign==='Scorpio'?'research, discretion, and focused problem-solving':a.sign==='Sagittarius'?'exploration, learning, and wider perspective':'actions that fit the location’s main theme'} rather than forcing unrelated activity.`;
+
   let caution=`Watch for: ${['Ardra','Ashlesha','Jyeshtha','Mula','Purva Bhadrapada'].includes(a.nak.name)?'intensity, overreaction, or hidden complications':'scattering attention or overinterpreting minor signals'}.`;
-  if(asp)caution=`Watch for: ${asp.a.name} ${asp.type} ${asp.b.name} can add ${['square','opposition'].includes(asp.type)?'friction or competing pressures':'extra momentum'} around this zone.`;
-  const why=[`Climate House ${a.climateHouse} → Bhavat Bhavam House ${derived}`,`${a.sign} ${a.signDegree.toFixed(2)}°`,`${a.nak.name} Pada ${a.nak.pada} · lord ${a.nak.lord}`,governors.length?`Transit governor: ${governorText}`:'No planet currently occupies this nakshatra',areaEmphasis(a,area)];
-  if(asp)why.push(`${asp.a.name} ${asp.type} ${asp.b.name} · orb ${asp.orb.toFixed(2)}°`);
-  if(roles.length)why.push(...roles.map(x=>`Personal role: ${x}`));
-  return {theme,manifestations,bestUse,caution,why:uniquePhrases(why)}
+  if(strongestDrishti)caution=`Watch for: ${strongestDrishti.from.name} casts its ${strongestDrishti.type} to ${strongestDrishti.to.name}, which can strongly modify this zone.`;
+  else if(strongest)caution=`Watch for: ${strongest.a.name} ${strongest.type} ${strongest.b.name} can add ${['square','opposition'].includes(strongest.type)?'friction or competing pressures':'extra momentum'} around this zone.`;
+
+  const why=[
+    `Climate House ${a.climateHouse} → Bhavat Bhavam House ${derived}`,
+    `${a.sign} ${a.signDegree.toFixed(2)}° · sign lord ${signLordName}`,
+    `${a.nak.name} Pada ${a.nak.pada} · nakshatra lord ${nakLordName}`,
+    governors.length?`Transit governor${governors.length>1?'s':''}: ${governors.map(g=>g.name).join(', ')}`:'No planet currently occupies this nakshatra',
+    keyPlanetSummary(signLord,'Sign lord'),
+    keyPlanetSummary(nakLord,'Nakshatra lord'),
+    governorRecords[0]?keyPlanetSummary(governorRecords[0],'Transit governor'):null,
+    moon?`Moon: ${moon.sign} ${moon.signDegree.toFixed(1)}° · ${moon.nak.name} · Climate House ${moon.climateHouse}`:null,
+    areaEmphasis(a,area)
+  ].filter(Boolean);
+  if(lordConnection)why.push(`${signLordName} ${lordConnection.type} ${nakLordName} · orb ${lordConnection.orb.toFixed(2)}°`);
+  if(strongestDrishti)why.push(`${strongestDrishti.from.name} casts ${strongestDrishti.type} to ${strongestDrishti.to.name} · orb ${strongestDrishti.orb.toFixed(2)}°`);
+  if(strongest&&!why.some(x=>x.includes(`${strongest.a.name} ${strongest.type} ${strongest.b.name}`)))why.push(`${strongest.a.name} ${strongest.type} ${strongest.b.name} · orb ${strongest.orb.toFixed(2)}°`);
+
+  return {theme,manifestations:compactManifestations,bestUse,caution,why:uniquePhrases(why)}
 }
 function forecastHTML(area=state.horoscopeArea){
   const f=forecastForLocation(area); if(!f)return `<div class="empty-state">Select a location on the map to generate this forecast.</div>`;
@@ -320,7 +394,7 @@ function selectedPointSummary(){
     <div><span>Climate house</span><b>H${a.climateHouse}</b></div>
     <div><span>Zodiac</span><b>${esc(a.sign)} ${a.signDegree.toFixed(2)}°</b></div>
     <div><span>Nakshatra</span><b>${esc(a.nak.name)} · P${a.nak.pada}</b></div>
-    <div><span>Traditional lord</span><b>${esc(a.nak.lord)}</b></div>
+    <div><span>Sign lord</span><b>${esc(SIGN_LORDS[a.sign])}</b></div><div><span>Nakshatra lord</span><b>${esc(a.nak.lord)}</b></div>
     <div class="wide"><span>Transit governor</span><b>${gov}</b></div>
   </div>`;
 }
@@ -375,7 +449,7 @@ function climateView(){
   ${locationHoroscopePanel()}`;
 }
 
-function horoscopeView(){return `<div class="grid two"><section class="panel hero-panel"><span class="eyebrow">DAILY HOROSCOPE</span><h1>Structured Vedic forecasting</h1><p>The forecast layer will consume calculated transit facts, your custom planet/house roles, nakshatras, house lords, Vedic aspects and Bhavat Bhavam. We are keeping interpretation downstream from the astronomy so the prose cannot invent planet positions.</p></section><section class="panel"><h2>Life areas</h2><div class="life-grid">${['Daily Overview','Self & Direction','Home & Family','Relationships','Career & Work','Money & Earning','Health & Vitality','Travel','Neighbors & Local Activity','Creativity & Children','Spiritual Life','Personal Climate'].map((x,i)=>`<button><span>${String(i+1).padStart(2,'0')}</span>${x}</button>`).join('')}</div></section></div>`}
+function horoscopeView(){return `<div class="grid two"><section class="panel hero-panel"><span class="eyebrow">DAILY HOROSCOPE</span><h1>Structured Vedic forecasting</h1><p>The forecast layer uses the geographic Climate House, sign lord, nakshatra lord, transit governor, current Moon, planetary positions, aspects, and Bhavat Bhavam. Personal natal roles are intentionally excluded from this city-climate forecast layer.</p></section><section class="panel"><h2>Life areas</h2><div class="life-grid">${['Daily Overview','Self & Direction','Home & Family','Relationships','Career & Work','Money & Earning','Health & Vitality','Travel','Neighbors & Local Activity','Creativity & Children','Spiritual Life','Personal Climate'].map((x,i)=>`<button><span>${String(i+1).padStart(2,'0')}</span>${x}</button>`).join('')}</div></section></div>`}
 
 async function testMapKey(){
   if(!state.maptilerKey){state.mapKeyTest='No key saved.';render();return}
