@@ -284,3 +284,11 @@
 .gandanta-row{border-color:#51445d;background:#110e17}
 @media(max-width:1200px){.dashboard-grid,.dashboard-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.dashboard-grid,.dashboard-secondary,.gandanta-grid{grid-template-columns:1fr}.city-dashboard .panel-head{display:grid}.dashboard-status{text-align:left}}
+
+/* v2.8 confirmation-gated forecast engine */
+.gated-forecast{display:grid;gap:12px}
+.gate-badge{display:inline-flex;width:max-content;align-items:center;border-radius:999px;padding:6px 10px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.gate-badge.confirmed{background:#153225;border:1px solid #2d7a55;color:#9ef0c4}
+.gate-badge.withheld{background:#342718;border:1px solid #7e6133;color:#f4d59b}
+.gated-forecast .forecast-details summary{cursor:pointer;font-weight:800;color:#cbd5ef}
+.gated-forecast .forecast-details ul{margin-top:10px}

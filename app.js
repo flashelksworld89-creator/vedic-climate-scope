@@ -285,6 +285,108 @@ function manifestationPool(a,area){
   if(area==='Personal Climate')items.unshift(`situations colored by ${tone}`);
   return uniquePhrases(items).slice(0,3)
 }
+
+// v2.8 confirmation-gated geographic forecast engine
+const FORECAST_THEMES={
+  movement:{label:'Movement & routing',best:'favor flexible routing, errands, short trips, and adaptable timing',watch:'leave extra time for changing routes or timing'},
+  communication:{label:'Communication & information',best:'favor messages, coordination, comparison, and information gathering',watch:'verify details before acting on incomplete information'},
+  commerce:{label:'Commerce & resources',best:'favor practical exchange, pricing, resource decisions, and measurable gains',watch:'avoid assuming that activity automatically means profit'},
+  authority:{label:'Authority & visibility',best:'favor clear leadership, formal decisions, and visible responsibilities',watch:'avoid unnecessary contests over control or status'},
+  relationships:{label:'Agreements & relationships',best:'favor negotiation, meetings, cooperation, and boundary-setting',watch:'do not force agreement when signals remain mixed'},
+  support:{label:'Support & stabilization',best:'favor maintenance, protection, repair, and strengthening what already works',watch:'do not confuse caution with stagnation'},
+  research:{label:'Research & hidden matters',best:'favor investigation, diagnosis, confidential work, and root-cause analysis',watch:'avoid overinterpreting incomplete or private information'},
+  pressure:{label:'Pressure & decisive action',best:'favor focused problem-solving and necessary action with clear limits',watch:'avoid rushing irreversible choices under pressure'},
+  structure:{label:'Structure & long-term work',best:'favor planning, disciplined work, scheduling, and durable systems',watch:'expect slower progress where structure or correction is required'},
+  creativity:{label:'Creativity & attraction',best:'favor design, presentation, social activity, and constructive experimentation',watch:'avoid prioritizing appearance over substance'},
+  expansion:{label:'Growth & opportunity',best:'favor learning, guidance, institutions, networking, and broader options',watch:'avoid overpromising or expanding faster than conditions support'},
+  transition:{label:'Transition & release',best:'favor closure, re-routing, review, and contingency planning',watch:'avoid treating a transition signal as a guarantee of loss or danger'},
+  disruption:{label:'Disruption & change',best:'favor troubleshooting, innovation, and plans that can adapt quickly',watch:'build redundancy before relying on one fragile plan'},
+  quiet:{label:'Quiet & withdrawal',best:'favor behind-the-scenes work, reflection, recovery, and low-noise tasks',watch:'avoid making major assumptions from limited outward activity'}
+};
+const HOUSE_THEME_MAP={
+  1:['authority','movement'],2:['commerce','communication'],3:['movement','communication'],4:['support','relationships'],
+  5:['creativity','relationships'],6:['structure','research'],7:['relationships','communication'],8:['research','transition'],
+  9:['expansion','movement'],10:['authority','structure'],11:['expansion','commerce'],12:['quiet','transition']
+};
+const SIGN_THEME_MAP={
+  Aries:['pressure','movement'],Taurus:['commerce','support'],Gemini:['communication','movement'],Cancer:['support','relationships'],
+  Leo:['authority','creativity'],Virgo:['research','communication'],Libra:['relationships','commerce'],Scorpio:['research','pressure'],
+  Sagittarius:['expansion','movement'],Capricorn:['structure','authority'],Aquarius:['disruption','expansion'],Pisces:['quiet','transition']
+};
+const NAK_THEME_MAP={
+  Ashwini:['movement','support'],Bharani:['pressure','transition'],Krittika:['pressure','research'],Rohini:['commerce','creativity'],Mrigashira:['research','movement'],
+  Ardra:['disruption','transition'],Punarvasu:['support','expansion'],Pushya:['support','structure'],Ashlesha:['research','pressure'],Magha:['authority','structure'],
+  'Purva Phalguni':['creativity','relationships'],'Uttara Phalguni':['relationships','support'],Hasta:['research','structure'],Chitra:['creativity','structure'],
+  Swati:['movement','relationships'],Vishakha:['pressure','expansion'],Anuradha:['relationships','support'],Jyeshtha:['authority','research'],Mula:['research','transition'],
+  'Purva Ashadha':['expansion','pressure'],'Uttara Ashadha':['structure','authority'],Shravana:['communication','movement'],Dhanishta:['commerce','relationships'],
+  Shatabhisha:['research','quiet'],'Purva Bhadrapada':['pressure','transition'],'Uttara Bhadrapada':['support','quiet'],Revati:['movement','transition']
+};
+const PLANET_THEME_MAP={
+  Sun:['authority'],Moon:['relationships','support'],Mars:['pressure','movement'],Mercury:['communication','commerce'],Venus:['relationships','creativity'],
+  Jupiter:['expansion','support'],Saturn:['structure','pressure'],Rahu:['disruption','expansion'],Ketu:['transition','research'],
+  Uranus:['disruption'],Neptune:['quiet','transition'],Pluto:['research','pressure']
+};
+function addEvidence(ledger,kind,theme,weight,text,polarity='support'){
+  if(!theme||!FORECAST_THEMES[theme])return;ledger.push({kind,theme,weight:+weight||0,text,polarity});
+}
+function confirmedThemeSummary(ledger){
+  const grouped={};
+  for(const e of ledger){
+    if(!grouped[e.theme])grouped[e.theme]={theme:e.theme,score:0,kinds:new Set(),support:[],counter:[]};
+    const g=grouped[e.theme];
+    if(e.polarity==='counter'){g.score-=Math.abs(e.weight);g.counter.push(e)}else{g.score+=e.weight;g.support.push(e);g.kinds.add(e.kind)}
+  }
+  return Object.values(grouped).map(g=>({...g,kinds:[...g.kinds],confirmed:g.kinds.size>=2&&g.score>0})).sort((a,b)=>b.score-a.score);
+}
+function buildEvidenceLedger(a,area){
+  const ledger=[];
+  (HOUSE_THEME_MAP[a.climateHouse]||[]).forEach((t,i)=>addEvidence(ledger,'climate_house',t,1.05-i*.15,`Climate House ${a.climateHouse} supports ${FORECAST_THEMES[t].label.toLowerCase()}.`));
+  (SIGN_THEME_MAP[a.sign]||[]).forEach((t,i)=>addEvidence(ledger,'zodiac',t,.9-i*.15,`${a.sign} contributes ${FORECAST_THEMES[t].label.toLowerCase()}.`));
+  (NAK_THEME_MAP[a.nak.name]||[]).forEach((t,i)=>addEvidence(ledger,'nakshatra',t,1.15-i*.15,`${a.nak.name} supports ${FORECAST_THEMES[t].label.toLowerCase()}.`));
+  const signLord=planetClimateRecord(SIGN_LORDS[a.sign]);
+  const nakLord=planetClimateRecord(a.nak.lord);
+  const governors=(a.governors||[]).map(g=>planetClimateRecord(g.name)).filter(Boolean);
+  const moon=planetClimateRecord('Moon');
+  for(const [label,kind,rec,base] of [['Sign lord','sign_lord',signLord,.85],['Nakshatra lord','nakshatra_lord',nakLord,1.05]]){
+    if(!rec)continue;const strength=placementStrength(rec).score;
+    for(const t of PLANET_THEME_MAP[rec.name]||[])addEvidence(ledger,kind,t,base+Math.max(-.25,Math.min(.5,strength*.12)),`${label} ${rec.name} is in ${rec.sign} / ${rec.nak.name} (${placementStrength(rec).dignity.label}).`);
+  }
+  for(const rec of governors){for(const t of PLANET_THEME_MAP[rec.name]||[])addEvidence(ledger,'transit_governor',t,1.25,`${rec.name} is physically transiting this nakshatra zone.`)}
+  if(moon){for(const t of [...(PLANET_THEME_MAP.Moon||[]),...(NAK_THEME_MAP[moon.nak.name]||[]).slice(0,1)])addEvidence(ledger,'moon',t,.65,`Moon is in ${moon.sign} / ${moon.nak.name}, Climate House ${moon.climateHouse}.`)}
+  const names=[signLord?.name,nakLord?.name,...governors.map(x=>x.name)].filter(Boolean);
+  const dr=strongestVedicDrishti(names),ang=strongestAspectForNames(names);
+  const asp=dr||ang;
+  if(asp){const tense=/square|opposition|Mars|Saturn/.test(`${asp.type} ${asp.from?.name||asp.a?.name||''}`);const p1=asp.from||asp.a,p2=asp.to||asp.b;
+    const themes=uniquePhrases([...(PLANET_THEME_MAP[p1?.name]||[]),...(PLANET_THEME_MAP[p2?.name]||[])]).slice(0,2);
+    themes.forEach(t=>addEvidence(ledger,'aspect',t,tense?.95:.75,`${p1?.name||'Planet'} ${asp.type} ${p2?.name||'planet'} modifies the zone.`,tense&&t==='support'?'counter':'support'));
+    if(tense)addEvidence(ledger,'aspect','pressure',1.05,`${p1?.name||'Planet'} ${asp.type} ${p2?.name||'planet'} adds pressure.`);
+  }
+  if(a.gandanta)addEvidence(ledger,'gandanta','transition',a.gandanta.core?1.5:1.0,`${a.gandanta.core?'Core':'Broad'} ${a.gandanta.label} Gandanta transition.`);
+  const derived=bhavatBhavamHouse(a.climateHouse);
+  const focus=AREA_RULES[area]?.houses||[];
+  if(focus.includes(a.climateHouse)||focus.includes(derived)){for(const t of HOUSE_THEME_MAP[a.climateHouse]||[])addEvidence(ledger,'bhavat_bhavam',t,.55,`Bhavat Bhavam reinforces the selected ${area.toLowerCase()} lens.`)}
+  return ledger;
+}
+function gatedForecastForLocation(area=state.horoscopeArea){
+  const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);if(!a)return null;
+  const ledger=buildEvidenceLedger(a,area),ranked=confirmedThemeSummary(ledger),confirmed=ranked.filter(x=>x.confirmed);
+  const primary=confirmed[0],secondary=confirmed[1];
+  const withheld=ranked.filter(x=>!x.confirmed&&x.score>.65).slice(0,4);
+  if(!primary){
+    return {withheld:true,theme:'No dominant city-climate theme cleared the confirmation gate for this location.',manifestations:['The current factors are mixed rather than converging on one outcome.'],bestUse:'Best use: treat this area as neutral or exploratory until more than one independent factor agrees.',caution:'Watch for: avoid forcing a prediction from a single isolated placement.',why:ledger.map(e=>e.text).slice(0,10),confidence:0,confirmed:[],withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
+  }
+  const P=FORECAST_THEMES[primary.theme],S=secondary?FORECAST_THEMES[secondary.theme]:null;
+  const support=uniquePhrases(primary.support.map(e=>e.text));
+  const manifestations=[`Conditions favor ${P.label.toLowerCase()} because ${primary.kinds.length} independent factor types agree.`,S?`${S.label} is the strongest secondary theme.`:null].filter(Boolean);
+  if(a.governors?.length)manifestations.push(`Current transit governor${a.governors.length>1?'s':''}: ${a.governors.map(g=>g.name).join(', ')}.`);
+  let caution=`Watch for: ${P.watch}.`;
+  if(a.gandanta)caution=`Watch for: this is a ${a.gandanta.core?'core':'broad'} Gandanta transition. ${FORECAST_THEMES.transition.watch}.`;
+  const theme=`${P.label} is the leading confirmed theme for ${a.sign} / ${a.nak.name} in Climate House ${a.climateHouse}${S?`; ${S.label.toLowerCase()} is secondary`:''}.`;
+  const why=[`Confirmation gate: ${primary.kinds.length} independent factor types · score ${primary.score.toFixed(2)}`,...support.slice(0,6)];
+  if(secondary)why.push(`Secondary: ${S.label} · ${secondary.kinds.length} factor types · score ${secondary.score.toFixed(2)}`);
+  if(withheld.length)why.push(`Withheld (insufficient confirmation): ${withheld.map(x=>FORECAST_THEMES[x.theme].label).join(', ')}`);
+  return {withheld:false,theme,manifestations:uniquePhrases(manifestations).slice(0,3),bestUse:`Best use: ${P.best}.`,caution,why,confidence:primary.kinds.length,confirmed:confirmed.slice(0,3).map(x=>FORECAST_THEMES[x.theme].label),withheldTopics:withheld.map(x=>FORECAST_THEMES[x.theme].label)};
+}
 function forecastForLocation(area=state.horoscopeArea){
   const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
   if(!a)return null;
@@ -335,8 +437,9 @@ function forecastForLocation(area=state.horoscopeArea){
   return {theme,manifestations:compactManifestations,bestUse,caution,why:uniquePhrases(why)}
 }
 function forecastHTML(area=state.horoscopeArea){
-  const f=forecastForLocation(area); if(!f)return `<div class="empty-state">Select a location on the map to generate this forecast.</div>`;
-  return `<div class="compact-forecast"><p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>What may show up</span><ul>${f.manifestations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.bestUse)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>Why this forecast?</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`
+  const f=gatedForecastForLocation(area);if(!f)return `<div class="empty-state">Select a location on the map to generate this forecast.</div>`;
+  const badge=f.withheld?`<span class="gate-badge withheld">Withheld · insufficient confirmation</span>`:`<span class="gate-badge confirmed">Confirmed · ${f.confidence} factor types</span>`;
+  return `<div class="compact-forecast gated-forecast">${badge}<p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>What may show up</span><ul>${f.manifestations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.bestUse)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>Evidence ledger</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`
 }
 
 function zoneRecord(index){
