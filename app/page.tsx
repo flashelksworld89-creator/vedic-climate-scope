@@ -9,7 +9,7 @@ import {
   SiderealMode,
   CalculationFlag
 } from "@swisseph/browser";
-import { buildInterpretation, formatDeg, norm } from "../lib/jyotish";
+import { buildInterpretation, formatDeg, norm, type BodyRow } from "../lib/jyotish";
 
 type ChartResult = ReturnType<typeof buildInterpretation> & {
   ayanamsa:number;
@@ -57,7 +57,7 @@ export default function Home(){
         ["Mars",Planet.Mars],["Jupiter",Planet.Jupiter],["Saturn",Planet.Saturn],["Rahu",LunarPoint.TrueNode]
       ] as const;
 
-      const bodies=bodyDefs.map(([name,id])=>{
+      const bodies: BodyRow[] = bodyDefs.map(([name,id])=>{
         const p=swe!.calculatePosition(jd,id,flags);
         return {name,longitude:norm(p.longitude),speed:p.longitudeSpeed};
       });
