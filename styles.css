@@ -339,3 +339,36 @@
 .time-mode-note{margin-top:7px;font-size:11px;line-height:1.35;color:#9ba6c8}
 .module-actions.single-action{grid-template-columns:1fr}
 @media(max-width:620px){.time-nav{grid-template-columns:repeat(5,minmax(48px,1fr));overflow-x:auto}.time-nav button{min-width:48px}}
+
+
+/* Native Vedic Horoscope tab */
+.horoscope-workspace{display:grid;gap:20px}
+.horoscope-controls{display:grid;gap:14px}
+.horoscope-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.horoscope-head h2{margin:6px 0 0}
+.horoscope-head .engine{margin:0;min-width:260px}
+.horoscope-control-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px}
+.horoscope-location{display:grid;gap:7px;border:1px solid #30374f;background:#0c1019;border-radius:11px;padding:11px 13px}
+.horoscope-location span{font-size:11px;color:#8993ad;text-transform:uppercase;letter-spacing:.08em}
+.horoscope-location b{font-size:13px;color:#edf1fa}
+.horoscope-time-nav{max-width:520px}
+.horoscope-summary-grid{display:grid;grid-template-columns:1.4fr .6fr;gap:20px}
+.horoscope-theme{border-left:2px solid #9d71db;padding-left:13px;color:#cbd3e8!important}
+.horoscope-table-wrap{overflow:auto}
+.horoscope-table{width:100%;min-width:850px;border-collapse:collapse}
+.horoscope-table th,.horoscope-table td{text-align:left;padding:11px 10px;border-bottom:1px solid #2b3144;font-size:12px}
+.horoscope-table th{color:#8993ad;font-size:10px;text-transform:uppercase;letter-spacing:.09em}
+.horoscope-table td{color:#dce2f0}
+.natal-house-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.natal-house-card{border:1px solid #2c3348;background:#0c1019;border-radius:14px;padding:15px}
+.natal-house-head{display:flex;align-items:flex-start;gap:11px}
+.natal-house-head>span{display:grid;place-items:center;min-width:38px;height:38px;border-radius:10px;background:#21182d;color:#c9a3ff;font-weight:900}
+.natal-house-head div{display:grid;gap:4px}
+.natal-house-head b{font-size:13px;color:#eef2fa}
+.natal-house-head small{font-size:10px;color:#8f98b3}
+.natal-house-card>p{font-size:12px;line-height:1.55;color:#9ca5bf;margin:13px 0}
+.natal-house-card details{border-top:1px solid #252b3d;padding-top:10px}
+.natal-house-card summary{cursor:pointer;color:#c8d0e2;font-size:11px;font-weight:700}
+.natal-house-card details p{font-size:11px;color:#8f99b5;line-height:1.6}
+@media(max-width:1050px){.horoscope-summary-grid{grid-template-columns:1fr}.natal-house-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.horoscope-head{display:grid}.horoscope-head .engine{min-width:0}.horoscope-control-grid{grid-template-columns:1fr}.natal-house-grid{grid-template-columns:1fr}}
