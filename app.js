@@ -984,6 +984,69 @@ function houseAreaForecast(h){
 function houseForecastHTML(h){
   const f=houseAreaForecast(h);return `<div class="compact-forecast house-forecast"><span class="gate-badge confirmed">House analysis · ${f.factorTypes} factor types</span><p class="forecast-theme">${esc(f.theme)}</p><div class="forecast-block"><span>${isMoonChart()?'How this part of town may be mentally processed':'What may show up in this part of town'}</span><ul>${f.events.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><p class="forecast-best">${esc(f.best)}</p><p class="forecast-caution">${esc(f.caution)}</p><details class="forecast-details"><summary>Why this house forecast?</summary><ul>${f.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details></div>`
 }
+
+function sharedTraditionalForecastData(){
+  if(!state.transit)return null;
+  const anchorLon=chartAnchorLongitude();
+  const anchorSign=signForLongitude(anchorLon);
+  const anchorLordName=SIGN_LORDS[anchorSign.name];
+  const anchorLord=planetClimateRecord(anchorLordName);
+  const moon=planetClimateRecord('Moon');
+  const sun=planetClimateRecord('Sun');
+  const nodes=[planetClimateRecord('Rahu'),planetClimateRecord('Ketu')].filter(Boolean);
+  const domainDefs=[
+    {key:'overall',label:'Overall',houses:[1,4,7,10]},
+    {key:'work',label:'Work & Career',houses:[6,10,11]},
+    {key:'money',label:'Money & Resources',houses:[2,8,11]},
+    {key:'relationships',label:'Relationships',houses:[5,7,8]},
+    {key:'home',label:'Home & Family',houses:[2,4]},
+    {key:'travel',label:'Travel & Movement',houses:[3,9,12]}
+  ];
+  const domains=domainDefs.map(d=>{
+    const rows=d.houses.map(h=>({h,summary:houseAreaForecast(h),condition:climateHouseCondition(h)}));
+    const scored=rows.map(x=>{
+      const c=x.condition;
+      let score=0;
+      score+=c.occupants.length*1.2+c.aspects.length*.7;
+      if(c.lord)score+=Math.abs(placementStrength(c.lord).score)*.35;
+      if(c.moon?.climateHouse===x.h)score+=1;
+      if(c.gandanta)score+=.7;
+      return {...x,score};
+    }).sort((a,b)=>b.score-a.score);
+    const lead=scored[0]||rows[0];
+    const support=rows.flatMap(x=>x.summary.events).slice(0,4);
+    const evidence=uniquePhrases(rows.flatMap(x=>x.summary.why)).slice(0,6);
+    let text='';
+    if(isMoonChart()){
+      text=`${d.label}: mental attention is most strongly pulled toward Moon House ${lead.h} (${lead.condition.library.name}). ${lead.summary.theme} The same classical factors are being read here as perception, emotional response, memory, receptivity and decision-processing rather than as purely external events.`;
+    }else{
+      text=`${d.label}: external activity is most concentrated around House ${lead.h} (${lead.condition.library.name}). ${lead.summary.theme} The reading emphasizes observable circumstances, encounters, responsibilities and actions in the environment.`;
+    }
+    return {...d,lead,rows,text,support,evidence};
+  });
+  const keyRecords=uniquePhrases([anchorLordName,'Moon','Sun','Jupiter','Saturn','Rahu','Ketu']).map(planetClimateRecord).filter(Boolean);
+  const ranked=rankKeyPlanets(keyRecords);
+  return {anchorLon,anchorSign,anchorLordName,anchorLord,moon,sun,nodes,domains,ranked};
+}
+function sharedTraditionalForecastPanel(){
+  const d=sharedTraditionalForecastData();
+  if(!d)return `<section class="panel shared-jyotish-panel"><div class="empty-state">Traditional horoscope synthesis will appear after the Swiss Ephemeris chart loads.</div></section>`;
+  const lead=d.ranked.slice(0,4);
+  const lens=isMoonChart()?'Chandra Lagna / mental-processing lens':'Ascendant / external-event lens';
+  return `<section class="panel shared-jyotish-panel">
+    <div class="panel-head"><div><span class="eyebrow">SHARED TRADITIONAL JYOTISH ENGINE</span><h2>${isMoonChart()?'Moon-chart horoscope':'Ascendant horoscope'}</h2></div><div class="dashboard-status">${esc(lens)}</div></div>
+    <div class="shared-jyotish-intro">
+      <p><b>${esc(d.anchorSign.name)}</b> anchors this page. ${esc(d.anchorLordName)} is the anchor lord${d.anchorLord?` and currently falls in House ${d.anchorLord.climateHouse}, ${d.anchorLord.sign}, ${d.anchorLord.nak.name} pada ${d.anchorLord.nak.pada} (${placementStrength(d.anchorLord).dignity.label})`:''}.</p>
+      <p>${isMoonChart()?'The Moon-chart forecast uses the same planetary conditions, nakshatras, dignities, house lords, Bhavat Bhavam and classical graha drishti used by the Horoscope section, but translates them into mental processing, emotional response, receptivity and perception.':'The Ascendant forecast uses the same planetary conditions, nakshatras, dignities, house lords, Bhavat Bhavam and classical graha drishti used by the Horoscope section, but translates them into external circumstances, encounters, actions and visible developments.'}</p>
+    </div>
+    <div class="shared-jyotish-keyplanets">${lead.map((x,i)=>`<div><span>${i+1}</span><p>${esc(keyPlanetSummary(x.rec,'Key graha'))}</p></div>`).join('')}</div>
+    <div class="shared-jyotish-domains">
+      ${d.domains.map(x=>`<article class="shared-domain-card"><span>${esc(x.label)}</span><p>${esc(x.text)}</p><ul>${uniquePhrases(x.support).slice(0,3).map(y=>`<li>${esc(y)}</li>`).join('')}</ul><details><summary>Why this forecast?</summary><ul>${x.evidence.map(y=>`<li>${esc(y)}</li>`).join('')}</ul></details></article>`).join('')}
+    </div>
+    <div class="notice">This shared layer is intentionally centralized. When Vimshottari dasha, divisional charts, Shadbala, Ashtakavarga, yogas and cancellation rules are added to the Horoscope engine, those same confirmed factors can feed both this Ascendant forecast and the Moon-chart forecast instead of creating three unrelated systems.</div>
+  </section>`;
+}
+
 function locationHoroscopePanel(){
   const a=state.selectedMapPoint||analyzeMapPoint(state.latitude,state.longitude);
   const activeH=state.houseForecast||a?.climateHouse||1;
@@ -1041,6 +1104,7 @@ function climateView(){
       <div class="map-caption"><span>${esc(state.cityName)} · ${esc(chartPageTitle())}</span><span>${state.scale} view</span><span>${cityRadiusLabel()} city radius</span><span>${state.roadNetworkCount?`${state.roadNetworkCount.toLocaleString()} named roads indexed`:'street network not indexed'}</span></div>
     </section>
   </div>
+  ${sharedTraditionalForecastPanel()}
   ${cityForecastDashboard()}
   ${locationHoroscopePanel()}`;
 }
