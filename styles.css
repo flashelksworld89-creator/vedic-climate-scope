@@ -372,3 +372,23 @@
 .natal-house-card details p{font-size:11px;color:#8f99b5;line-height:1.6}
 @media(max-width:1050px){.horoscope-summary-grid{grid-template-columns:1fr}.natal-house-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.horoscope-head{display:grid}.horoscope-head .engine{min-width:0}.horoscope-control-grid{grid-template-columns:1fr}.natal-house-grid{grid-template-columns:1fr}}
+
+
+/* Shared Jyotish horoscope layer for Ascendant + Moon pages */
+.shared-jyotish-panel{display:grid;gap:18px}
+.shared-jyotish-intro{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.shared-jyotish-intro p{margin:0;border:1px solid #2f364b;background:#0c1019;border-radius:12px;padding:14px;color:#aeb7cd;font-size:12px;line-height:1.65}
+.shared-jyotish-keyplanets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.shared-jyotish-keyplanets>div{display:flex;gap:10px;align-items:flex-start;border:1px solid #2b3246;background:#0c1019;border-radius:11px;padding:11px}
+.shared-jyotish-keyplanets span{display:grid;place-items:center;min-width:26px;height:26px;border-radius:8px;background:#21182d;color:#c9a3ff;font-size:10px;font-weight:900}
+.shared-jyotish-keyplanets p{margin:0!important;font-size:11px!important;line-height:1.55!important;color:#c5ccdd!important}
+.shared-jyotish-domains{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.shared-domain-card{border:1px solid #2d3449;background:#0c1019;border-radius:14px;padding:15px}
+.shared-domain-card>span{display:block;color:#d8b7ff;font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:900;margin-bottom:8px}
+.shared-domain-card p{font-size:12px!important;line-height:1.62!important;color:#c4ccdf!important;margin:0 0 10px!important}
+.shared-domain-card ul{margin:0 0 10px;padding-left:18px;color:#99a4bf;font-size:11px;line-height:1.55}
+.shared-domain-card details{border-top:1px solid #252b3d;padding-top:9px}
+.shared-domain-card summary{cursor:pointer;color:#cbd3e5;font-size:11px;font-weight:700}
+.shared-domain-card details ul{margin-top:9px}
+@media(max-width:1050px){.shared-jyotish-domains{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.shared-jyotish-intro,.shared-jyotish-keyplanets,.shared-jyotish-domains{grid-template-columns:1fr}}
