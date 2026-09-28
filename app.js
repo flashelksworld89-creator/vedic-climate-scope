@@ -1122,7 +1122,111 @@ function moveMapToState(){
   updateGeographicWheel();
 }
 
-function render(){const chartTab=state.tab==='climate'||state.tab==='moon';document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Ascendant Climate'],['moon','☽','Moon Climate'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav></aside><main><header><div><span class="eyebrow">${chartTab?esc(chartPageSubtitle()):'SIDEREAL ASTROLOGY PLATFORM'}</span><h1>${chartTab?esc(chartPageTitle()):'Settings'}</h1></div><div class="pill">${chartTab?`Valid until ${esc(formatBoundary(chartBoundaryDate()))}`:'Lahiri · 27 Nakshatras · Bhavat Bhavam'}</div></header>${chartTab?climateView():settingsView()}</main></div>`;bind();initClimateMap()}
+
+const NATAL_HOUSE_NAMES={
+1:'Self & Body',2:'Wealth & Speech',3:'Courage & Local Movement',4:'Home & Foundations',
+5:'Intelligence & Children',6:'Service & Obstacles',7:'Partnerships',8:'Longevity & Transformation',
+9:'Dharma & Fortune',10:'Career & Karma',11:'Gains & Networks',12:'Loss, Retreat & Liberation'
+};
+const NATAL_HOUSE_DOMAINS={
+1:'identity, vitality, body, temperament and life direction',2:'family resources, accumulated wealth, speech, food and values',
+3:'courage, initiative, siblings, communication, skills and short journeys',4:'home, mother, property, emotional foundations and inner security',
+5:'intelligence, creativity, children, learning, mantra, romance and prior merit',6:'service, work, illness, debts, disputes, competition and problem-solving',
+7:'marriage, partnership, contracts, clients and direct encounters with others',8:'longevity, vulnerability, inheritance, shared resources, secrets and deep change',
+9:'dharma, teachers, higher learning, pilgrimage, long journeys and fortune',10:'career, duty, public standing, authority and visible action',
+11:'income, gains, fulfillment of desires, organizations, friends and networks',12:'expenses, sleep, isolation, foreign places, retreat, endings and liberation'
+};
+function natalHouseForLongitude(lon){
+  const ascSign=Math.floor(norm(activeAsc())/30),planetSign=Math.floor(norm(lon)/30);
+  return ((planetSign-ascSign+12)%12)+1;
+}
+function natalSignForHouse(h){
+  const ascSign=Math.floor(norm(activeAsc())/30);
+  return SIGNS[(ascSign+h-1)%12];
+}
+function natalPlanetRecord(name){
+  const p=activePlanets().find(x=>x.name===name);if(!p)return null;
+  const sg=signForLongitude(p.longitude),nak=nakInfo(p.longitude),house=natalHouseForLongitude(p.longitude);
+  return {...p,sign:sg.name,signDegree:sg.degree,nak,house,climateHouse:house,drishti:vedicDrishtiForPlanet(name)};
+}
+function natalHouseLordRecord(h){
+  const sign=natalSignForHouse(h),lordName=SIGN_LORDS[sign],lord=natalPlanetRecord(lordName);
+  return {house:h,sign,lordName,lord};
+}
+function natalHouseAspects(h){
+  const out=[];
+  for(const p of activePlanets()){
+    const from=natalHouseForLongitude(p.longitude);
+    const target7=((from+5)%12)+1;
+    if(target7===h)out.push({planet:p,type:'7th aspect',fromHouse:from});
+    if(p.name==='Mars'){
+      if(((from+2)%12)+1===h)out.push({planet:p,type:'4th aspect',fromHouse:from});
+      if(((from+6)%12)+1===h)out.push({planet:p,type:'8th aspect',fromHouse:from});
+    }
+    if(p.name==='Jupiter'){
+      if(((from+3)%12)+1===h)out.push({planet:p,type:'5th aspect',fromHouse:from});
+      if(((from+7)%12)+1===h)out.push({planet:p,type:'9th aspect',fromHouse:from});
+    }
+    if(p.name==='Saturn'){
+      if(((from+1)%12)+1===h)out.push({planet:p,type:'3rd aspect',fromHouse:from});
+      if(((from+8)%12)+1===h)out.push({planet:p,type:'10th aspect',fromHouse:from});
+    }
+  }
+  return out;
+}
+function natalHouseSummary(h){
+  const base=natalHouseLordRecord(h),occupants=activePlanets().filter(p=>natalHouseForLongitude(p.longitude)===h),aspects=natalHouseAspects(h);
+  const lordHouse=base.lord?.house||null;
+  const derived=bhavatBhavamHouse(h);
+  let text=`House ${h} (${NATAL_HOUSE_NAMES[h]}) is ${base.sign}, ruled by ${base.lordName}.`;
+  if(base.lord)text+=` Its lord is placed in House ${lordHouse}, ${base.lord.sign}, ${base.lord.nak.name} pada ${base.lord.nak.pada}, and is ${placementStrength(base.lord).dignity.label}.`;
+  if(occupants.length)text+=` Occupants: ${occupants.map(p=>p.name).join(', ')}.`;
+  if(aspects.length)text+=` Classical aspects into this house: ${aspects.map(a=>`${a.planet.name} ${a.type}`).join(', ')}.`;
+  text+=` Bhavat Bhavam links this house to House ${derived}.`;
+  return { ...base,occupants,aspects,derived,text };
+}
+function natalCoreSynthesis(){
+  if(!state.transit)return null;
+  const asc=signForLongitude(activeAsc()),lagnaLordName=SIGN_LORDS[asc.name],lagnaLord=natalPlanetRecord(lagnaLordName);
+  const moon=natalPlanetRecord('Moon'),sun=natalPlanetRecord('Sun'),jupiter=natalPlanetRecord('Jupiter'),saturn=natalPlanetRecord('Saturn'),rahu=natalPlanetRecord('Rahu'),ketu=natalPlanetRecord('Ketu');
+  const themes=[];
+  themes.push(`The sidereal Ascendant is ${asc.name} ${asc.degree.toFixed(2)}°. ${lagnaLordName} rules the chart${lagnaLord?` and is placed in House ${lagnaLord.house} in ${lagnaLord.sign}, ${lagnaLord.nak.name} pada ${lagnaLord.nak.pada} (${placementStrength(lagnaLord).dignity.label})`:''}.`);
+  if(moon)themes.push(`The Moon is in House ${moon.house}, ${moon.sign}, ${moon.nak.name} pada ${moon.nak.pada}. Its nakshatra lord is ${moon.nak.lord}, linking mental processing and lived experience to that graha's condition.`);
+  if(sun)themes.push(`The Sun is in House ${sun.house} in ${sun.sign}; this emphasizes visibility, authority, purpose and responsibility through House ${sun.house} topics.`);
+  if(jupiter)themes.push(`Jupiter occupies House ${jupiter.house} and is ${placementStrength(jupiter).dignity.label}; its classical aspects distribute Jupiterian influence from that house.`);
+  if(saturn)themes.push(`Saturn occupies House ${saturn.house} and is ${placementStrength(saturn).dignity.label}; that house tends to require sustained effort, structure and maturation.`);
+  if(rahu&&ketu)themes.push(`Rahu and Ketu activate the House ${rahu.house}/${ketu.house} axis, highlighting a traditional nodal polarity between appetite, amplification and unfamiliar experience versus release, separation and prior familiarity.`);
+  return {asc,lagnaLordName,lagnaLord,moon,themes};
+}
+function natalPlacementsTable(){
+  if(!state.transit)return '<div class="empty-state">Swiss Ephemeris is still loading.</div>';
+  return `<div class="horoscope-table-wrap"><table class="horoscope-table"><thead><tr><th>Graha</th><th>Sidereal placement</th><th>House</th><th>Nakshatra</th><th>Pada</th><th>Dignity</th><th>Motion</th></tr></thead><tbody>${activePlanets().map(p=>{const r=natalPlanetRecord(p.name),st=placementStrength(r);return `<tr><td><b>${p.glyph||''} ${esc(p.name)}</b></td><td>${esc(r.sign)} ${r.signDegree.toFixed(2)}°</td><td>H${r.house}</td><td>${esc(r.nak.name)}</td><td>${r.nak.pada}</td><td>${esc(st.dignity.label)}</td><td>${p.retrograde?'Retrograde':'Direct'}</td></tr>`}).join('')}</tbody></table></div>`;
+}
+function natalHousesGrid(){
+  return `<div class="natal-house-grid">${Array.from({length:12},(_,i)=>i+1).map(h=>{const x=natalHouseSummary(h);return `<article class="natal-house-card"><div class="natal-house-head"><span>H${h}</span><div><b>${esc(NATAL_HOUSE_NAMES[h])}</b><small>${esc(x.sign)} · Lord ${esc(x.lordName)}</small></div></div><p>${esc(NATAL_HOUSE_DOMAINS[h])}</p><details><summary>Traditional evidence</summary><p>${esc(x.text)}</p></details></article>`}).join('')}</div>`;
+}
+function horoscopeView(){
+  const core=natalCoreSynthesis();
+  return `<div class="horoscope-workspace">
+    <section class="panel horoscope-controls">
+      <div class="horoscope-head"><div><span class="eyebrow">SIDEREAL CHART MOMENT</span><h2>${esc(state.cityName)} · ${esc(state.timeZone)}</h2></div><div class="engine ${state.engineStatus}"><span class="engine-dot"></span>${esc(state.engineMessage)}</div></div>
+      <div class="horoscope-control-grid">
+        <label>Chart date & time<input id="localDateTime" type="datetime-local" value="${esc(state.localDateTime)}"></label>
+        <div class="horoscope-location"><span>Coordinates</span><b>${(+state.cityLatitude).toFixed(5)}, ${(+state.cityLongitude).toFixed(5)}</b></div>
+        <div class="horoscope-location"><span>Ayanamsa</span><b>${state.transit?`${state.transit.ayanamsa.toFixed(6)}° Lahiri`:'Calculating…'}</b></div>
+      </div>
+      <div class="time-nav horoscope-time-nav" aria-label="Horoscope time navigation"><button type="button" data-time-shift="-1440">−1d</button><button type="button" data-time-shift="-60">−1h</button><button type="button" id="useNow">Now</button><button type="button" data-time-shift="60">+1h</button><button type="button" data-time-shift="1440">+1d</button></div>
+    </section>
+    ${core?`<section class="horoscope-summary-grid">
+      <div class="panel horoscope-core"><span class="eyebrow">CLASSICAL FOUNDATION</span><h2>${core.asc.name} Lagna · ${core.lagnaLordName} ruled</h2>${core.themes.map(t=>`<p class="horoscope-theme">${esc(t)}</p>`).join('')}<div class="notice">This layer interprets natal promise from sign, whole-sign house, nakshatra, dignity, house lordship and classical graha drishti. Dasha timing and divisional-chart confirmation are not yet active.</div></div>
+      <div class="panel horoscope-evidence"><span class="eyebrow">CALCULATION CHECK</span><h2>Raw chart facts</h2><div class="module-fact"><span>Ascendant</span><b>${core.asc.name} ${core.asc.degree.toFixed(2)}°</b></div><div class="module-fact"><span>Lagna lord</span><b>${esc(core.lagnaLordName)}${core.lagnaLord?` · H${core.lagnaLord.house}`:''}</b></div><div class="module-fact"><span>Moon</span><b>${core.moon?`${core.moon.sign} ${core.moon.signDegree.toFixed(2)}° · H${core.moon.house}`:'—'}</b></div><div class="module-fact"><span>UTC used</span><b>${esc(state.transit.utc)}</b></div></div>
+    </section>`:''}
+    <section class="panel"><span class="eyebrow">GRAHA PLACEMENTS</span><h2>Exact sidereal chart state</h2>${natalPlacementsTable()}</section>
+    <section class="panel"><span class="eyebrow">TWELVE BHAVAS</span><h2>Whole-sign house analysis</h2>${natalHousesGrid()}</section>
+  </div>`;
+}
+
+function render(){const chartTab=state.tab==='climate'||state.tab==='moon',horoscopeTab=state.tab==='horoscope';const title=chartTab?chartPageTitle():horoscopeTab?'Vedic Horoscope':'Settings';const subtitle=chartTab?chartPageSubtitle():horoscopeTab?'Natal-style whole-sign Jyotish analysis':'SIDEREAL ASTROLOGY PLATFORM';const content=chartTab?climateView():horoscopeTab?horoscopeView():settingsView();document.querySelector('#app').innerHTML=`<div class="app-shell"><aside><div class="brand"><div class="brand-mark">☸</div><div><b>VEDIC</b><span>CLIMATE SCOPE</span></div></div><nav>${[['climate','◉','Ascendant Climate'],['moon','☽','Moon Climate'],['horoscope','✦','Horoscope'],['settings','⚙','Settings']].map(([t,i,l])=>`<button data-tab="${t}" class="${state.tab===t?'active':''}"><span>${i}</span>${l}</button>`).join('')}</nav></aside><main><header><div><span class="eyebrow">${esc(subtitle)}</span><h1>${esc(title)}</h1></div><div class="pill">${chartTab?`Valid until ${esc(formatBoundary(chartBoundaryDate()))}`:horoscopeTab?'Lahiri · Whole Sign · Classical Drishti':'Lahiri · 27 Nakshatras · Bhavat Bhavam'}</div></header>${content}</main></div>`;bind();initClimateMap()}
 
 
 function shiftTransitTime(minutes){
