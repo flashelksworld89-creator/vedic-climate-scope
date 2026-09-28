@@ -1,0 +1,8 @@
+{
+  "name": "vedic-climate-scope",
+  "version": "3.5.1",
+  "private": true,
+  "scripts": {
+    "build": "rm -rf public && mkdir -p public && cp index.html app.js styles.css public/"
+  }
+}
